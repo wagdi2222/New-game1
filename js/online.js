@@ -361,7 +361,6 @@
       const p = list[i], slot = document.createElement('div');
       slot.className = 'slot' + (p ? '' : ' empty');
       const icon = new Image();
-      icon.className = 'px';
       icon.alt = '';
       icon.src = u.ICON.players[i];
       const text = document.createElement('div');

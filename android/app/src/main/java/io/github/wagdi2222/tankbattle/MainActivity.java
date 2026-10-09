@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -117,6 +118,14 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String platform() {
             return "android";
+        }
+
+        // Keeps the screen from turning while the player steers by tilting the phone
+        @JavascriptInterface
+        public void holdOrientation(boolean hold) {
+            runOnUiThread(() -> setRequestedOrientation(hold
+                    ? ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                    : ActivityInfo.SCREEN_ORIENTATION_FULL_USER));
         }
 
         // Opens Android's share sheet (WhatsApp, Telegram, SMS...) with the room invitation

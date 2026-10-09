@@ -39,7 +39,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .overlay>.card{margin:auto}
 .card{position:relative;width:min(460px,100%);background:linear-gradient(180deg,var(--indigo-2),var(--indigo));border:1px solid rgba(242,177,52,.35);
   border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden}
-.card::before{content:"";display:block;height:10px;margin:-20px -20px 4px;background:var(--zellige) repeat-x;background-size:20px 20px}
+.card::before{content:"";display:block;height:10px;margin:-20px -20px 4px;background:var(--zellige) repeat-x;background-size:20px 10px}
 .card h2{margin:0;font-size:1.45rem;font-weight:900;text-align:center;color:var(--gold)}
 .card p{margin:0;color:var(--muted);text-align:center;line-height:1.7}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:14px;padding:12px 18px;font-weight:800;font-size:1.05rem;
@@ -95,7 +95,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .node{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;padding:0}
 .node .disc{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 40% 35%,#2E4C7E,#16294A);
   border:3px solid var(--gold);box-shadow:0 4px 0 rgba(0,0,0,.4);position:relative}
-.node .disc img{width:36px;height:36px}
+.node .disc img{width:44px;height:44px}
 .node .num{position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:var(--gold);color:#2A1800;border-radius:99px;padding:0 8px;font-weight:900;font-size:.85rem}
 .node .name{font-size:.78rem;font-weight:700;color:var(--cream);text-align:center;line-height:1.3;margin-top:6px}
 .node .stars{display:flex;gap:2px}
@@ -109,7 +109,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 /* ---------- briefing ---------- */
 .brief{width:min(620px,100%)}
 .brief .who{display:flex;gap:14px;align-items:center}
-.brief .who canvas{width:84px;height:84px;border-radius:50%;background:radial-gradient(circle,#1FA3A3,#0E5458);border:3px solid var(--gold);flex:none}
+.brief .who img{width:84px;height:84px;border-radius:50%;background:#0F4C55;border:3px solid var(--gold);flex:none}
 .brief .who b{display:block;color:var(--gold);font-size:1.15rem}
 .brief .who span{color:var(--muted);font-size:.85rem}
 .brief .say{background:rgba(0,0,0,.25);border-radius:14px;padding:12px 14px;line-height:1.8;position:relative}
@@ -164,7 +164,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .help ul{margin:0;padding-inline-start:18px}
 .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .item{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.22);border-radius:12px;padding:8px 10px}
-.item img,.item canvas{width:32px;height:32px;flex:none;border-radius:4px}
+.item img,.item canvas{width:40px;height:40px;flex:none}
 .item b{display:block;font-size:.92rem}
 .item span{font-size:.8rem;color:var(--muted)}
 kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;padding:0 6px;font-family:inherit;font-size:.85em}
@@ -185,7 +185,7 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 #play.port .hud{flex-wrap:wrap;gap:6px}
 .chip{direction:rtl;display:flex;align-items:center;gap:6px;background:rgba(19,35,63,.92);border:1px solid var(--line);border-radius:10px;padding:4px 10px;white-space:nowrap}
 #play.port .chip{padding:3px 8px}
-.chip img{width:18px;height:18px}
+.chip img{width:22px;height:22px}
 .chip small{color:var(--muted);font-weight:700;font-size:.72rem}
 .hp{display:flex;gap:2px;direction:ltr}
 .hp i{width:7px;height:10px;border-radius:2px;background:#33486B}
@@ -212,6 +212,14 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 .dpad .arr{fill:#8FA3C4}
 .dpad .arm.on + .arr{fill:#2A1800}
 .dpad .hub{fill:#14243F}
+.tiltview{width:var(--pad);height:var(--pad);flex:none}
+.tiltview svg{width:100%;height:100%;display:block;overflow:visible}
+.tiltview .ring{fill:rgba(20,36,63,.75);stroke:#3F5F92;stroke-width:2}
+.tiltview .dead{fill:none;stroke:#3F5F92;stroke-width:1.5;stroke-dasharray:4 5}
+.tiltview .arr{fill:#3F5F92;transition:fill .1s}
+.tiltview .arr.on{fill:var(--gold)}
+.tiltview .dot{fill:var(--gold);stroke:#2A1800;stroke-width:2.5}
+.tiltview.nosensor .dot{fill:#5D6F90;stroke:#14243F}
 .fire{width:var(--fire);height:var(--fire);border-radius:50%;flex:none;background:radial-gradient(circle at 38% 32%,#FF9A6A,#E2361C 60%,#9C1F0C);
   box-shadow:0 6px 0 #6A1406,0 10px 24px rgba(0,0,0,.5),inset 0 2px 0 rgba(255,255,255,.35);display:grid;place-items:center;color:#fff}
 .fire svg{width:44%;height:44%}
@@ -276,7 +284,7 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 .btn.wa:active{box-shadow:0 1px 0 #13803C}
 .slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .slot{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}
-.slot img{width:32px;height:32px;flex:none}
+.slot img{width:36px;height:36px;flex:none}
 .slot div{min-width:0}
 .slot b{display:block;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot small{color:var(--muted);font-size:.78rem}
@@ -383,7 +391,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <!-- souq -->
 <section id="souq" class="screen" hidden>
   <div class="top"><h2>السوق</h2><span class="pill"><i class="coin"></i><b id="s-coins">٠</b> درهم</span><button class="back" data-back>رجوع</button></div>
-  <div class="merchant"><img class="px" id="merchant-img" alt=""><div id="merchant-say">أهلاً بك في السوق يا حارس! عندنا أجود العُدّة للدفاع عن الواحة.</div></div>
+  <div class="merchant"><img id="merchant-img" alt=""><div id="merchant-say">أهلاً بك في السوق يا حارس! عندنا أجود العُدّة للدفاع عن الواحة.</div></div>
   <div class="shop" id="shop"></div>
 </section>
 
@@ -401,6 +409,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <section><h3>المهام</h3><div class="items" id="help-missions"></div></section>
     <section><h3>التحكم</h3><ul>
       <li>اسحب إبهامك على لوحة الاتجاهات للتحرك، واضغط زر النار (مطولاً للإطلاق المتواصل). زر الصقر يستدعي صقراً اشتريته من السوق.</li>
+      <li>إمالة الجوال: اختر «إمالة الجوال» من الإعدادات، ثم أمِل الجوال نحو الجهة التي تريد أن تسير إليها الدبابة. تُضبط الإمالة على وضع يدك عند بداية كل معركة، والمس دائرة الإمالة لضبطها من جديد.</li>
       <li>لاعبان على جوال واحد: كل لاعب له جهة من الشاشة فيها لوحة اتجاهات وزر نار. يُفضّل وضع الجوال أفقياً.</li>
       <li>العب مع أصدقائك عبر الإنترنت: أنشئ غرفة وأرسل رابطها على واتساب، فيدخل معك حتى ثلاثة أصدقاء كل من جواله، ولو من المتصفح دون تثبيت. يختار صاحب الغرفة المرحلة، ويشترك الجميع في حماية البئر.</li>
       <li>لوحة المفاتيح: <kbd>WASD</kbd> و<kbd>Space</kbd> للاعب الأول، و<kbd>الأسهم</kbd> و<kbd>Enter</kbd> للثاني، و<kbd>F</kbd> للصقر، و<kbd>P</kbd> للإيقاف. يد التحكم مدعومة.</li>
@@ -425,6 +434,10 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <div class="set-row"><label>الاهتزاز</label><button class="toggle" id="s-vibrate" aria-label="الاهتزاز"></button></div>
     <div class="set-row"><label>الأرقام</label>
       <div class="seg" id="s-digits"><button data-v="arabic">١٢٣</button><button data-v="latin">123</button></div></div>
+    <div class="set-row"><label>التحريك</label>
+      <div class="seg" id="s-move"><button data-v="pad">الأزرار</button><button data-v="tilt">إمالة الجوال</button></div></div>
+    <div class="set-row" id="s-tilt-row"><label>حساسية الإمالة</label>
+      <div class="seg" id="s-tiltsens"><button data-v="low">منخفضة</button><button data-v="mid">متوسطة</button><button data-v="high">عالية</button></div></div>
     <div class="set-row"><label>حجم أزرار التحكم</label>
       <div class="seg" id="s-pad"><button data-v="s">صغير</button><button data-v="m">متوسط</button><button data-v="l">كبير</button></div></div>
     <div class="set-row"><label>زر النار على اليسار<small>لمن يستخدم اليد اليسرى</small></label><button class="toggle" id="s-lefty" aria-label="زر النار على اليسار"></button></div>
@@ -436,7 +449,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <!-- briefing -->
 <section id="briefing" class="overlay" hidden>
   <div class="card brief">
-    <div class="who"><canvas id="portrait" width="32" height="32"></canvas><div><b>القائد سالم</b><span id="br-where"></span></div></div>
+    <div class="who"><img id="portrait" alt="القائد سالم"><div><b>القائد سالم</b><span id="br-where"></span></div></div>
     <h2 id="br-title"></h2>
     <div class="tags" id="br-tags"></div>
     <div class="say" id="br-say"></div>
@@ -458,15 +471,15 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <!-- game -->
 <section id="play" hidden>
   <div class="hud" id="hudA">
-    <div class="chip" id="h-stage-chip"><img class="px" id="ico-region" alt=""><b id="h-stage"></b></div>
+    <div class="chip" id="h-stage-chip"><img id="ico-region" alt=""><b id="h-stage"></b></div>
     <div class="hud-players" id="h-players"></div>
   </div>
   <div class="hud" id="hudB">
     <div class="chip"><small>النقاط</small><b id="h-score">٠</b></div>
-    <div class="chip" id="h-obj"><img class="px" id="h-obj-ico" alt=""><small id="h-obj-label"></small><b id="h-obj-val"></b></div>
-    <div class="chip" id="h-well"><img class="px" id="ico-well" alt=""><div class="hp well" id="h-wellhp"></div></div>
-    <div class="chip" id="h-boss" hidden><img class="px" id="ico-boss" alt=""><div class="bossbar"><i id="h-bossbar"></i></div></div>
-    <button class="chip" id="h-falcon2" hidden aria-label="استدعِ الصقر"><img class="px" id="ico-falcon2" alt=""><b id="h-falcons2">٠</b></button>
+    <div class="chip" id="h-obj"><img id="h-obj-ico" alt=""><small id="h-obj-label"></small><b id="h-obj-val"></b></div>
+    <div class="chip" id="h-well"><img id="ico-well" alt=""><div class="hp well" id="h-wellhp"></div></div>
+    <div class="chip" id="h-boss" hidden><img id="ico-boss" alt=""><div class="bossbar"><i id="h-bossbar"></i></div></div>
+    <button class="chip" id="h-falcon2" hidden aria-label="استدعِ الصقر"><img id="ico-falcon2" alt=""><b id="h-falcons2">٠</b></button>
     <button class="icon-btn" id="b-pause" aria-label="إيقاف مؤقت"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
   </div>
   <div id="field">
@@ -480,10 +493,11 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
   <div class="zone" id="zoneL">
     <div class="fire p1" data-fire="0" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
     <div class="dpad" data-pad="0"></div>
-    <div class="hint">الحركة</div>
+    <div class="tiltview" id="tiltview" hidden></div>
+    <div class="hint" id="hint-move">الحركة</div>
   </div>
   <div class="zone" id="zoneR">
-    <button class="falcon-btn" id="b-falcon" aria-label="استدعِ الصقر"><img class="px" id="ico-falcon" alt=""><b id="h-falcons">٠</b></button>
+    <button class="falcon-btn" id="b-falcon" aria-label="استدعِ الصقر"><img id="ico-falcon" alt=""><b id="h-falcons">٠</b></button>
     <div class="fire" data-fire="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
     <div class="dpad" data-pad="1" hidden></div>
     <div class="hint">إطلاق</div>
@@ -556,6 +570,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 
 <script src="js/levels.js"></script>
 <script src="js/sprites.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
 <script src="js/net.js"></script>

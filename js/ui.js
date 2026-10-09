@@ -18,7 +18,7 @@
     get(k, d) { try { const v = localStorage.getItem('waha.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('waha.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
   };
-  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '' }, store.get('settings', {}));
+  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '', move: 'pad', tiltSens: 'mid' }, store.get('settings', {}));
   const save = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {} }, store.get('save', {}));
   save.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, save.upg);
   save.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, save.stats);
@@ -28,7 +28,7 @@
   const AR = '٠١٢٣٤٥٦٧٨٩';
   const fmt = n => (settings.digits === 'latin' ? String(n) : String(n).replace(/[0-9]/g, d => AR[d]));
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  const img = (src, cls) => { const i = new Image(); i.src = src; i.alt = ''; i.className = 'px' + (cls ? ' ' + cls : ''); return i; };
+  const img = (src, cls) => { const i = new Image(); i.src = src; i.alt = ''; if (cls) i.className = cls; return i; };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const starRow = (n, total) => { const d = el('div', 'stars'); for (let i = 0; i < (total || 3); i++) d.append(el('i', 'star' + (i < n ? '' : ' off'))); return d; };
 
@@ -43,33 +43,24 @@
   });
   const preview = new TB.Game({});
 
-  // ---------- icons ----------
+  // ---------- icons: vector drawings that stay sharp at any size (js/icons.js) ----------
   const fx = S.effects();
-  const url = (c, s) => S.iconURL(c, s);
-  const starIcon = (() => {
-    const c = document.createElement('canvas'); c.width = c.height = 16;
-    const g = c.getContext('2d'); g.fillStyle = '#F2B134'; g.beginPath();
-    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 3 : 7.5; g.lineTo(8 + Math.cos(a) * r, 8.5 + Math.sin(a) * r); }
-    g.fill(); return c;
-  })();
+  const V = TB.icons.url;
   const ICON = {
-    well: url(fx.well[0]), skin: url(fx.skin), tower: url(fx.tower[0]), camel: url(fx.camel[0][0]), lantern: url(fx.lantern, 5),
-    boss: url(S.vehicle('boss', 'enemy', 0, 0), 2), foe: url(S.vehicle('jeep', 'enemy', 0, 0)), falcon: url(fx.falcon[0]),
-    p1: url(S.vehicle('A', 'p1', 0, 0)), p2: url(S.vehicle('A', 'p2', 0, 0)), dhow: url(fx.dhow, 2), star: url(starIcon),
-    players: TB.consts.PALETTES.map(pal => url(S.vehicle('A', pal, 0, 0))),
+    well: V('well'), skin: V('skin'), tower: V('tower'), camel: V('camel'), lantern: V('lantern'), boss: V('boss'), foe: V('foe'),
+    falcon: V('falcon'), dhow: V('dhow'), star: V('star'), engine: V('engine'), commander: V('commander'),
+    players: TB.consts.PALETTES.map(pal => V('vehicle:A:' + pal)),
     pu: {}, region: {},
   };
-  for (const k in fx.powerups) ICON.pu[k] = url(fx.powerups[k]);
-  ICON.region = {
-    desert: url(S.terrainSwatch(5, 'desert')), oasis: url(S.terrainSwatch(4, 'oasis')), mountains: url(S.terrainSwatch(2, 'mountains')),
-    coast: ICON.dhow, oldcity: ICON.lantern,
-  };
+  ICON.p1 = ICON.players[0]; ICON.p2 = ICON.players[1];
+  for (const k of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba']) ICON.pu[k] = V(k);
+  for (const r of ['desert', 'oasis', 'mountains', 'coast', 'oldcity']) ICON.region[r] = V('region:' + r);
   const MISSION_ICON = { defend: ICON.well, collect: ICON.skin, towers: ICON.tower, escort: ICON.camel, survive: ICON.lantern, boss: ICON.boss };
   const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss };
   const TIME_NAME = { day: 'نهار', dawn: 'فجر', dusk: 'غروب', night: 'ليل' };
   const MAQAM_NAME = { hijaz: 'مقام الحجاز', bayati: 'مقام البيات', kurd: 'مقام الكرد', saba: 'مقام الصبا', rast: 'مقام الرست', nahawand: 'مقام النهاوند' };
   const RHYTHM = { desert: 'maqsum', oasis: 'baladi', mountains: 'saidi', coast: 'maqsum', oldcity: 'baladi' };
-  document.documentElement.style.setProperty('--zellige', 'url(' + url(fx.frame, 2) + ')');
+  document.documentElement.style.setProperty('--zellige', 'url("' + V('zellige') + '")');
 
   const PU_INFO = {
     shield: ['الدرع الدمشقي', 'حماية من كل القذائف لعشر ثوانٍ'],
@@ -94,8 +85,9 @@
 
   function show(name) {
     for (const s of SCREENS) $(s).hidden = s !== name;
+    const was = screen;
     screen = name;
-    if (name !== 'play') TB.audio.engine('off');
+    if (name !== 'play') { TB.audio.engine('off'); if (was === 'play') holdOrientation(false); }
     if (name === 'menu') refreshMenu();
     if (name === 'play' || name === 'editor') layout();
     if (name !== 'play') musicFor('menu');
@@ -266,10 +258,7 @@
   }
   function openBrief(stage, mode) {
     pending = { stage, mode };
-    const pc = $('portrait').getContext('2d');
-    pc.imageSmoothingEnabled = false;
-    pc.clearRect(0, 0, 32, 32);
-    pc.drawImage(fx.portrait, 0, 0);
+    $('portrait').src = ICON.commander;
     const info = L.REGIONS[stage.region];
     $('br-where').textContent = info.name + ' · ' + MAQAM_NAME[info.maqam];
     $('br-title').textContent = mode === 'daily' ? 'تحدي اليوم' : mode === 'custom' ? 'خريطتي' : (mode === 'endless' ? 'الساحة ' + fmt(stage.n - L.count) : 'المرحلة ' + fmt(stage.n)) + ': ' + stage.name;
@@ -308,11 +297,12 @@
   $('briefing').addEventListener('click', e => { if (e.target === $('briefing')) $('briefing').hidden = true; });
 
   // ---------- settings ----------
-  const SEGS = [['s-diff', 'difficulty'], ['s-pad', 'pad'], ['s-digits', 'digits']];
+  const SEGS = [['s-diff', 'difficulty'], ['s-pad', 'pad'], ['s-digits', 'digits'], ['s-move', 'move'], ['s-tiltsens', 'tiltSens']];
   const TOGGLES = [['s-sound', 'sound'], ['s-music', 'music'], ['s-engine', 'engine'], ['s-vibrate', 'vibrate'], ['s-lefty', 'lefty'], ['s-full', 'full']];
   function renderSettings() {
     for (const [id, key] of SEGS) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v === settings[key]));
     for (const [id, key] of TOGGLES) $(id).setAttribute('aria-pressed', String(!!settings[key]));
+    $('s-tilt-row').hidden = settings.move !== 'tilt';
   }
   function applySettings() {
     TB.audio.setSfx(settings.sound);
@@ -327,7 +317,9 @@
   function closeSettings() {
     $('settings').hidden = true;
     store.set('settings', settings);
-    applySettings(); layout(); hud = {};
+    applySettings(); hud = {};
+    if (screen === 'play') { configureControls(); resetInput(); }
+    layout();
     if (screen === 'menu') refreshMenu();
     if (screen === 'journey') buildJourney();
   }
@@ -337,6 +329,14 @@
       if (!b) return;
       settings[key] = b.dataset.v;
       renderSettings(); applySettings(); layout();
+      if (key === 'move' && b.dataset.v === 'tilt') {
+        enableTilt().then(ok => {
+          if (ok) { toast('أمِل الجوال لتتحرك الدبابة'); return; }
+          settings.move = 'pad';
+          renderSettings();
+          gtoast(ICON.lantern, 'لا نجد حسّاس الحركة', 'جهازك لا يسمح بقراءة الإمالة، فبقيت لوحة الاتجاهات');
+        });
+      }
     });
   }
   for (const [id, key] of TOGGLES) {
@@ -369,14 +369,10 @@
     for (const m in MISSION_HELP) $('help-missions').append(item(MISSION_ICON[m], L.MISSIONS[m].name, MISSION_HELP[m]));
     const TERRAIN = [[1, 'جدار طين', 'يتهدّم بالقذائف'], [2, 'حجر القلاع', 'لا يُكسر إلا بمدفع من ثلاث نجوم'], [3, 'ماء الواحة', 'يمنع الدبابات وتعبره القذائف'],
       [4, 'نخيل', 'يخفي ما تحته'], [5, 'كثبان', 'تُبطئ الدبابات'], [6, 'رمال متحركة', 'تعلق فيها الدبابة لحظات']];
-    for (const [type, name, text] of TERRAIN) {
-      const c = S.terrainSwatch(type, 'desert');
-      c.style.cssText = 'width:32px;height:32px';
-      $('help-terrain').append(item(c, name, text));
-    }
+    for (const [type, name, text] of TERRAIN) $('help-terrain').append(item(V('terrain:' + type), name, text));
     const C = TB.consts;
     const FOE_HELP = ['سريع لكنه ضعيف', 'يطلق رشقتين متتاليتين', 'تقذف من فوق الجدران؛ ابتعد عن الدائرة الحمراء', 'يزرع ألغاماً خلفه؛ دمّرها بقذيفة', 'مدرّع ثقيل يحتاج ٤ إصابات'];
-    C.ENEMY.forEach((e, k) => $('help-foes').append(item(url(S.vehicle(e.design, 'enemy', 0, 0)), e.name, FOE_HELP[k] + ' · ' + fmt(e.score) + ' نقطة')));
+    C.ENEMY.forEach((e, k) => $('help-foes').append(item(V('vehicle:' + e.design + ':enemy'), e.name, FOE_HELP[k] + ' · ' + fmt(e.score) + ' نقطة')));
     $('help-foes').append(item(ICON.boss, C.BOSS.name, 'زعيم ضخم بثلاثة مدافع وقذائف'));
     for (const k of Object.keys(PU_INFO)) $('help-items').append(item(ICON.pu[k], PU_INFO[k][0], PU_INFO[k][1]));
   }
@@ -385,7 +381,7 @@
   const WARES = [
     { id: 'armor', name: 'الدرع', desc: 'نقطة صحة إضافية لدبابتك في كل معركة.', icon: ICON.pu.shield, max: 3, price: l => [250, 500, 900][l] },
     { id: 'cannon', name: 'المدفع', desc: 'تبدأ كل معركة بمدفع أقوى درجة.', icon: ICON.pu.hammer, max: 2, price: l => [400, 900][l] },
-    { id: 'engine', name: 'المحرك', desc: 'دبابتك أسرع بعشرة في المئة لكل درجة.', icon: url(S.vehicle('B', 'p1', 0, 0)), max: 3, price: l => [200, 450, 800][l] },
+    { id: 'engine', name: 'المحرك', desc: 'دبابتك أسرع بعشرة في المئة لكل درجة.', icon: ICON.engine, max: 3, price: l => [200, 450, 800][l] },
     { id: 'falcon', name: 'الصقر', desc: 'استدعِه بزر الصقر في أي معركة لينقضّ على ثلاثة أعداء.', icon: ICON.falcon, max: 3, price: () => 150 },
   ];
   const THANKS = ['بارك الله لك يا حارس!', 'صفقة رابحة!', 'هذه من أجود ما عندي.', 'الواحة أقوى بك!'];
@@ -528,6 +524,7 @@
     clearTimeout(curtainTimer);
     curtainTimer = setTimeout(() => {
       c.classList.add('open');
+      calibrate();
       if (!game.remote) game.begin();
       curtainTimer = setTimeout(() => { c.hidden = true; }, 500);
     }, 1500);
@@ -547,7 +544,10 @@
       TB.audio.play('pause');
       if (!guest()) { TB.audio.engine('off'); TB.audio.stopMusic(); musicKey = ''; }
       $('pause-info').textContent = guest() ? 'المعركة مستمرة عند أصدقائك' : game.stage.name + ' · النقاط ' + fmt(game.score);
-    } else if (!guest()) musicFor('play');
+    } else {
+      calibrate();
+      if (!guest()) musicFor('play');
+    }
   }
   function remotePause(on) {
     if (screen !== 'play') return;
@@ -855,10 +855,94 @@
   const inputs = [newInput(), newInput()];
   const pointers = new Map();
   const zoneL = $('zoneL'), zoneR = $('zoneR'), fireR = zoneR.querySelector('[data-fire]'), fireL = zoneL.querySelector('[data-fire]'), padR = zoneR.querySelector('.dpad');
+  const padL = zoneL.querySelector('.dpad');
+
+  // ---------- tilt: steer by tilting the phone ----------
+  const tiltView = $('tiltview');
+  tiltView.innerHTML = '<svg viewBox="-80 -80 160 160" aria-hidden="true"><circle class="ring" r="74"/><circle class="dead" r="20"/>' +
+    '<path class="arr" data-d="0" d="M0,-68 L13,-51 L-13,-51 Z"/><path class="arr" data-d="1" d="M68,0 L51,13 L51,-13 Z"/>' +
+    '<path class="arr" data-d="2" d="M0,68 L13,51 L-13,51 Z"/><path class="arr" data-d="3" d="M-68,0 L-51,13 L-51,-13 Z"/><circle class="dot" r="13"/></svg>';
+  const tiltDot = tiltView.querySelector('.dot'), tiltArrows = [...tiltView.querySelectorAll('.arr')];
+  const tilt = { raw: null, zero: null, vec: [0, 0], dir: -1, at: -1e9, listening: false };
+  const TILT_ON = { low: 0.2, mid: 0.13, high: 0.08 }; // sine of the tilt that starts the tank: about 12°, 7.5° and 4.5°
+  const tiltMode = () => settings.move === 'tilt' && !(game.nPlayers === 2 && !NET.active);
+  function screenAngle() {
+    const o = window.screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : +window.orientation || 0;
+    return (((a % 360) + 360) % 360) * Math.PI / 180;
+  }
+  function onOrientation(e) {
+    if (e.beta == null || e.gamma == null) return;
+    // Which way is downhill across the screen (x to the right, y up), whatever way the phone is turned
+    const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180, th = screenAngle();
+    const dx = Math.cos(b) * Math.sin(g), dy = -Math.sin(b);
+    tilt.raw = [dx * Math.cos(th) - dy * Math.sin(th), dx * Math.sin(th) + dy * Math.cos(th)];
+    tilt.at = performance.now();
+    if (!tilt.zero) tilt.zero = tilt.raw.slice();
+    const vx = tilt.raw[0] - tilt.zero[0], vy = tilt.raw[1] - tilt.zero[1], ax = Math.abs(vx), ay = Math.abs(vy);
+    tilt.vec = [vx, vy];
+    const on = TILT_ON[settings.tiltSens] || TILT_ON.mid;
+    let d = -1;
+    // Once moving, the tank keeps going until the phone is nearly back to where it started
+    if (Math.max(ax, ay) > (tilt.dir >= 0 ? on * 0.65 : on)) d = ax > ay ? (vx > 0 ? 1 : 3) : (vy > 0 ? 0 : 2);
+    if (d >= 0 && tilt.dir >= 0 && (d & 1) !== (tilt.dir & 1) && (tilt.dir & 1 ? ay / Math.max(1e-3, ax) : ax / Math.max(1e-3, ay)) < 1.3) d = tilt.dir;
+    tilt.dir = d;
+  }
+  function listenTilt() {
+    if (tilt.listening) return;
+    tilt.listening = true;
+    window.addEventListener('deviceorientation', onOrientation);
+  }
+  // Whatever way the phone is held now counts as level
+  function calibrate() { tilt.zero = tilt.raw ? tilt.raw.slice() : null; tilt.vec = [0, 0]; tilt.dir = -1; }
+  // iPhones ask before sharing the motion sensor, and only after a tap
+  async function tiltPermission() {
+    const D = window.DeviceOrientationEvent;
+    if (!D) return false;
+    if (typeof D.requestPermission !== 'function') return true;
+    try { return (await D.requestPermission()) === 'granted'; } catch (e) { return false; }
+  }
+  async function enableTilt() {
+    if (!(await tiltPermission())) return false;
+    listenTilt();
+    const since = performance.now();
+    for (let i = 0; i < 15 && tilt.at < since; i++) await wait(100);
+    return tilt.at >= since;
+  }
+  function paintTilt() {
+    const on = TILT_ON[settings.tiltSens] || TILT_ON.mid, k = 20 / on;
+    let x = tilt.vec[0] * k, y = -tilt.vec[1] * k;
+    const m = Math.hypot(x, y);
+    if (m > 56) { x *= 56 / m; y *= 56 / m; }
+    tiltDot.setAttribute('cx', x.toFixed(1));
+    tiltDot.setAttribute('cy', y.toFixed(1));
+    for (const a of tiltArrows) a.classList.toggle('on', +a.dataset.d === tilt.dir);
+    tiltView.classList.toggle('nosensor', performance.now() - tilt.at > 1500);
+  }
+  const turned = () => { if (tiltMode()) calibrate(); };
+  if (window.screen.orientation && window.screen.orientation.addEventListener) window.screen.orientation.addEventListener('change', turned);
+  else window.addEventListener('orientationchange', turned);
+  // While steering by tilt, keep the screen from turning when the phone leans far
+  function holdOrientation(on) {
+    if (window.TankApp && window.TankApp.holdOrientation) { try { window.TankApp.holdOrientation(on); } catch (e) { /* old app */ } return; }
+    const o = window.screen.orientation;
+    if (!o || !o.lock) return;
+    if (on) o.lock(o.type).catch(() => {});
+    else { try { o.unlock(); } catch (e) { /* not locked */ } }
+  }
+  document.addEventListener('fullscreenchange', () => { if (screen === 'play' && tiltMode() && document.fullscreenElement) holdOrientation(true); });
+  if (settings.move === 'tilt') {
+    listenTilt();
+    document.addEventListener('click', () => { tiltPermission(); }, { once: true, capture: true });
+  }
 
   function configureControls() {
-    const duo = game.nPlayers === 2 && !NET.active;
+    const duo = game.nPlayers === 2 && !NET.active, tilted = tiltMode();
     $('play').classList.toggle('duo', duo);
+    padL.hidden = tilted;
+    tiltView.hidden = !tilted;
+    $('hint-move').textContent = tilted ? 'أمِل الجوال · المس لضبطها' : 'الحركة';
+    if (tilted) { listenTilt(); calibrate(); }
+    holdOrientation(tilted);
     fireL.hidden = !duo;
     padR.hidden = !duo;
     fireR.dataset.fire = duo ? '1' : '0';
@@ -883,7 +967,13 @@
       f.classList.toggle('on', st.fires.size > 0 || st.keyFire || st.gpFire);
     }
   }
-  const dirOf = i => { const st = inputs[i]; return st.pad >= 0 ? st.pad : st.keys.length ? st.keys[st.keys.length - 1] : st.gp; };
+  const dirOf = i => {
+    const st = inputs[i];
+    if (st.pad >= 0) return st.pad;
+    if (st.keys.length) return st.keys[st.keys.length - 1];
+    if (st.gp >= 0) return st.gp;
+    return i === 0 && tiltMode() ? tilt.dir : -1;
+  };
   const fireOf = i => { const st = inputs[i]; return st.fires.size > 0 || st.keyFire || st.gpFire; };
   const inside = (elm, e, slack) => { const r = elm.getBoundingClientRect(); return e.clientX >= r.left - slack && e.clientX <= r.right + slack && e.clientY >= r.top - slack && e.clientY <= r.bottom + slack; };
 
@@ -891,6 +981,12 @@
     if (e.target.closest('#b-falcon')) return;
     e.preventDefault();
     TB.audio.init();
+    if (zone === zoneL && !tiltView.hidden) {
+      calibrate();
+      toast('ضُبطت الإمالة على وضع جوالك الآن');
+      vibrate(25);
+      return;
+    }
     try { zone.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
     const duo = game.nPlayers === 2;
     const fire = [...zone.querySelectorAll('[data-fire]')].find(f => !f.hidden);
@@ -1039,6 +1135,7 @@
     } else acc = 0;
     draw();
     updateHud();
+    if (!tiltView.hidden) paintTilt();
     const p = game.players && game.players[myPid] && game.players[myPid].tank;
     TB.audio.engine(!paused && game.state === 'play' && p ? (p.moving ? 'move' : 'idle') : 'off');
   }
@@ -1129,7 +1226,7 @@
     b.setAttribute('aria-label', name);
     b.dataset.v = ch;
     if (type === 'tower') b.append(img(ICON.tower));
-    else if (type) b.append(S.terrainSwatch(type, 'desert'));
+    else if (type) b.append(img(V('terrain:' + type)));
     else b.append(el('span', 'erase', '✕'));
     b.onclick = () => { brush = ch; renderBrushes(); };
     $('brushes').append(b);
