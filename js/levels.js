@@ -57,7 +57,7 @@
   // Tiles that must stay clear for spawns, the well, the boss and the caravan road
   function reserved(x, y, o) {
     if (y === 0 && (x === 0 || x === 6 || x === 12)) return true;
-    if (y === 12 && (x === 4 || x === 8)) return true;
+    if (y === 12 && (x === 2 || x === 4 || x === 8 || x === 10)) return true;
     if (o.well && y >= 11 && x >= 5 && x <= 7) return true;
     if (o.boss && y <= 2 && x >= 4 && x <= 8) return true;
     return !!(o.road && o.road.has(x + ',' + y));

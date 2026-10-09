@@ -18,7 +18,7 @@
     get(k, d) { try { const v = localStorage.getItem('waha.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('waha.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
   };
-  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true }, store.get('settings', {}));
+  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '' }, store.get('settings', {}));
   const save = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {} }, store.get('save', {}));
   save.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, save.upg);
   save.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, save.stats);
@@ -32,9 +32,13 @@
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const starRow = (n, total) => { const d = el('div', 'stars'); for (let i = 0; i < (total || 3); i++) d.append(el('i', 'star' + (i < n ? '' : ' off'))); return d; };
 
+  const NET = TB.online;
+  const hosting = () => NET.active && NET.role === 'host';
+  const guest = () => NET.active && NET.role === 'client';
+  const vibrate = p => { if (settings.vibrate && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) { /* unsupported */ } } };
   const game = new TB.Game({
-    sound: n => TB.audio.play(n),
-    vibrate: p => { if (settings.vibrate && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) { /* unsupported */ } } },
+    sound: n => { TB.audio.play(n); if (hosting()) NET.capture('s', n); },
+    vibrate: p => { if (!hosting()) vibrate(p); },
     event: onGameEvent,
   });
   const preview = new TB.Game({});
@@ -52,6 +56,7 @@
     well: url(fx.well[0]), skin: url(fx.skin), tower: url(fx.tower[0]), camel: url(fx.camel[0][0]), lantern: url(fx.lantern, 5),
     boss: url(S.vehicle('boss', 'enemy', 0, 0), 2), foe: url(S.vehicle('jeep', 'enemy', 0, 0)), falcon: url(fx.falcon[0]),
     p1: url(S.vehicle('A', 'p1', 0, 0)), p2: url(S.vehicle('A', 'p2', 0, 0)), dhow: url(fx.dhow, 2), star: url(starIcon),
+    players: TB.consts.PALETTES.map(pal => url(S.vehicle('A', pal, 0, 0))),
     pu: {}, region: {},
   };
   for (const k in fx.powerups) ICON.pu[k] = url(fx.powerups[k]);
@@ -82,9 +87,10 @@
   };
 
   // ---------- screens ----------
-  const SCREENS = ['menu', 'journey', 'souq', 'medals', 'help', 'play', 'editor'];
+  const SCREENS = ['menu', 'online', 'journey', 'souq', 'medals', 'help', 'play', 'editor'];
   const OVERLAYS = ['settings', 'briefing', 'pause', 'result', 'over', 'codebox'];
-  let screen = 'menu', paused = false, run = null, curtainTimer = 0, playersWanted = 1, musicKey = '';
+  let screen = 'menu', paused = false, run = null, curtainTimer = 0, playersWanted = 1, musicKey = '', myPid = 0, names = null, onlinePick = false;
+  const PLAYER_COLORS = ['#5BD17A', '#6FB3F2', '#B994F0', '#F5A253'];
 
   function show(name) {
     for (const s of SCREENS) $(s).hidden = s !== name;
@@ -102,17 +108,24 @@
     show('menu');
     if (!isApp && history.state && history.state.tb) history.back();
   }
-  function goJourney() { hideOverlays(); paused = false; clearTimeout(curtainTimer); game.state = 'idle'; buildJourney(); show('journey'); }
+  function goJourney() {
+    hideOverlays(); paused = false; clearTimeout(curtainTimer); game.state = 'idle';
+    if (NET.active) { if (hosting()) NET.toLobby(); else NET.open(); return; }
+    onlinePick = false;
+    buildJourney(); show('journey');
+  }
 
   TB.onBack = () => {
     if (open('settings')) { closeSettings(); return true; }
     if (open('codebox')) { $('codebox').hidden = true; return true; }
     if (open('briefing')) { $('briefing').hidden = true; return true; }
     if (screen === 'play') {
-      if (paused || open('result') || open('over')) goJourney();
+      if (paused || open('result') || open('over')) { if (guest()) NET.leave(false); else goJourney(); }
       else pause(true);
       return true;
     }
+    if (screen === 'online') { if (NET.active) NET.leave(false); else goMenu(); return true; }
+    if (screen === 'journey' && onlinePick) { NET.open(); return true; }
     if (screen !== 'menu') { goMenu(); return true; }
     return false;
   };
@@ -164,7 +177,8 @@
   $('b-help').onclick = () => { buildHelp(); show('help'); };
   $('b-settings').onclick = openSettings;
   $('b-editor').onclick = () => show('editor');
-  for (const b of document.querySelectorAll('[data-back]')) b.onclick = goMenu;
+  for (const b of document.querySelectorAll('[data-back]')) b.onclick = () => (screen === 'journey' && onlinePick ? NET.open() : goMenu());
+  $('b-online').onclick = () => { TB.audio.init(); NET.open(); };
 
   // ---------- install ----------
   let installPrompt = null;
@@ -277,6 +291,8 @@
       best.append(starRow(save.stars[stage.n] || 0), el('span', 'tag', 'أفضل نتيجة: ' + fmt(save.best[stage.n])));
     }
     renderPlayers();
+    $('br-players').hidden = NET.active;
+    if (NET.active) $('br-goal').textContent = goalText(stage) + ' · ' + fmt(NET.players.length) + ' لاعبين';
     $('briefing').hidden = false;
   }
   function renderPlayers() { for (const b of $('br-players').children) b.setAttribute('aria-pressed', String(+b.dataset.v === playersWanted)); }
@@ -288,7 +304,7 @@
     if (pending) $('br-goal').textContent = goalText(pending.stage);
   });
   $('br-back').onclick = () => { $('briefing').hidden = true; };
-  $('br-start').onclick = () => { $('briefing').hidden = true; startStage(pending); };
+  $('br-start').onclick = () => { $('briefing').hidden = true; if (hosting()) NET.hostStart(pending); else startStage(pending); };
   $('briefing').addEventListener('click', e => { if (e.target === $('briefing')) $('briefing').hidden = true; });
 
   // ---------- settings ----------
@@ -424,6 +440,7 @@
     { id: 'water', name: 'جامع القِرَب', desc: 'اجمع كل القِرَب في مهمة', icon: ICON.skin, test: c => c.r && c.r.won && c.r.mission === 'collect' && c.r.stats.skinsStolen === 0 && c.r.stats.skinsCollected >= c.r.stage.rows.join('').split('Q').length - 1 },
     { id: 'traveler', name: 'الرحّالة', desc: 'اوصل إلى المدينة القديمة', icon: ICON.lantern, test: () => save.unlocked >= 17 },
     { id: 'hero', name: 'بطل الواحة', desc: 'أكمل الرحلة كلها', icon: ICON.star, test: () => save.unlocked > L.count },
+    { id: 'friends', name: 'أصدقاء الواحة', desc: 'افوزوا معاً عبر الإنترنت', icon: ICON.players[2], test: c => c.r && c.r.won && c.r.online },
     { id: 'stars', name: 'نجوم الصحراء', desc: 'اجمع ثلاثين نجمة', icon: ICON.star, test: () => totalStars() >= 30 },
   ];
   function checkMedals(result) {
@@ -476,17 +493,26 @@
     if (document.fullscreenElement || !root.requestFullscreen) return;
     root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   }
-  function startStage(p) {
+  function startStage(p, extra) {
+    extra = extra || {};
     TB.audio.init();
     applySettings();
     if (settings.full && touch && !standalone) enterFullscreen();
     run = p;
-    game.start({ stage: p.stage, difficulty: settings.difficulty, players: playersWanted, upgrades: save.upg, falcons: save.falcons });
+    myPid = extra.myPid || 0;
+    names = extra.names || null;
+    game.start({
+      stage: p.stage, difficulty: extra.difficulty || settings.difficulty, players: extra.players || playersWanted,
+      upgrades: save.upg, playerUpgrades: extra.playerUpgrades, falcons: extra.falcons || save.falcons,
+    });
+    game.remote = !!extra.remote;
+    game.logCells = hosting();
     hideOverlays();
     paused = false;
     configureControls();
     resetInput();
     hud = {};
+    buildPlayerChips();
     show('play');
     curtain();
     musicKey = '';
@@ -502,44 +528,72 @@
     clearTimeout(curtainTimer);
     curtainTimer = setTimeout(() => {
       c.classList.add('open');
-      game.begin();
+      if (!game.remote) game.begin();
       curtainTimer = setTimeout(() => { c.hidden = true; }, 500);
     }, 1500);
   }
   function pause(on) {
     if (screen !== 'play' || game.state === 'ended' || open('result') || open('over')) return;
-    paused = on;
+    // A guest can't stop the host's battle: the menu opens while the fight goes on
+    if (!guest()) paused = on;
     $('pause').hidden = !on;
     resetInput();
+    $('b-restart').hidden = guest();
+    $('b-pset').hidden = guest();
+    $('b-resume').textContent = guest() ? 'عُد إلى المعركة' : 'أكمل المعركة';
+    $('b-quit').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : 'الخروج إلى الرحلة';
+    if (hosting()) NET.setPause(on);
     if (on) {
-      TB.audio.engine('off');
       TB.audio.play('pause');
-      TB.audio.stopMusic(); musicKey = '';
-      $('pause-info').textContent = game.stage.name + ' · النقاط ' + fmt(game.score);
-    } else musicFor('play');
+      if (!guest()) { TB.audio.engine('off'); TB.audio.stopMusic(); musicKey = ''; }
+      $('pause-info').textContent = guest() ? 'المعركة مستمرة عند أصدقائك' : game.stage.name + ' · النقاط ' + fmt(game.score);
+    } else if (!guest()) musicFor('play');
+  }
+  function remotePause(on) {
+    if (screen !== 'play') return;
+    if (on) {
+      $('pause').hidden = false;
+      $('b-restart').hidden = true; $('b-pset').hidden = true; $('b-resume').hidden = true;
+      $('b-quit').textContent = 'اخرج من الغرفة';
+      $('pause-info').textContent = 'أوقف المضيف المعركة مؤقتاً…';
+    } else {
+      $('pause').hidden = true; $('b-resume').hidden = false;
+    }
   }
   $('b-pause').onclick = () => pause(true);
   $('b-resume').onclick = () => pause(false);
-  $('b-restart').onclick = () => startStage(run);
+  $('b-restart').onclick = () => (hosting() ? NET.hostStart(run) : startStage(run));
   $('b-pset').onclick = openSettings;
-  $('b-quit').onclick = goJourney;
+  $('b-quit').onclick = () => (guest() ? NET.leave(false) : goJourney());
 
+  function dyingBanner(data) {
+    const why = { well: 'سقط البئر!', lives: 'نفدت الدبابات!', camels: 'ضاعت القافلة!', skins: 'سُرقت القِرَب!' }[data.reason] || '';
+    $('banner').textContent = why;
+    $('banner').classList.add('rise');
+    TB.audio.engine('off');
+  }
+  const powerupToast = type => { if (TOAST[type]) toast(TOAST[type], ICON.pu[type]); };
   function onGameEvent(name, data) {
-    if (name === 'dying') {
-      const why = { well: 'سقط البئر!', lives: 'نفدت الدبابات!', camels: 'ضاعت القافلة!', skins: 'سُرقت القِرَب!' }[data.reason] || '';
-      $('banner').textContent = why;
-      $('banner').classList.add('rise');
-      TB.audio.engine('off');
-    } else if (name === 'gameover') setTimeout(() => showOver(data), 250);
-    else if (name === 'clear') setTimeout(() => showResult(data), 150);
-    else if (name === 'powerup') toast(TOAST[data], ICON.pu[data]);
+    if (hosting() && ['dying', 'toast', 'powerup'].includes(name)) NET.capture(name, data);
+    if (name === 'dying') dyingBanner(data);
+    else if (name === 'gameover' || name === 'clear') {
+      if (hosting()) { data.online = true; NET.hostEnd(data); }
+      if (name === 'gameover') setTimeout(() => showOver(data), 250); else setTimeout(() => showResult(data), 150);
+    } else if (name === 'powerup') powerupToast(data);
     else if (name === 'toast') toast(data);
-    else if (name === 'falcons') { save.falcons = data; persist(); }
+    else if (name === 'falcons') {
+      if (data.pid === myPid) { save.falcons = data.n; persist(); }
+      else if (hosting()) NET.capture('falcons', data);
+    }
+  }
+  // A guest gets the end of the battle from the host
+  function remoteEnd(r) {
+    if (r.won) showResult(r); else { TB.audio.play('over'); showOver(r); }
   }
 
   function bank(r) {
     save.dirhams += r.coins;
-    save.stats.kills += r.stats.kills.reduce((a, b) => a + b, 0);
+    save.stats.kills += (r.stats.kills || []).reduce((a, b) => a + b, 0);
     save.stats.towers += r.stats.towers;
     save.stats.falcon += r.stats.falconUses;
     save.stats.bosses += r.stats.boss;
@@ -551,12 +605,13 @@
     TB.audio.engine('off');
     TB.audio.stopMusic(); musicKey = '';
     const n = r.stage.n, mode = run.mode;
-    if (mode === 'campaign' || mode === 'endless') {
+    // A guest played the host's stage: it earns dirhams and medals, not a place on its own journey
+    if ((mode === 'campaign' || mode === 'endless') && !guest()) {
       save.stars[n] = Math.max(save.stars[n] || 0, r.stars);
       save.best[n] = Math.max(save.best[n] || 0, r.score);
       save.unlocked = Math.max(save.unlocked, n + 1);
     }
-    if (mode === 'daily') save.dailyBest[r.stage.daily] = Math.max(save.dailyBest[r.stage.daily] || 0, r.score);
+    if (mode === 'daily' && !guest()) save.dailyBest[r.stage.daily] = Math.max(save.dailyBest[r.stage.daily] || 0, r.score);
     bank(r);
     persist();
     const fresh = checkMedals(r);
@@ -572,18 +627,27 @@
     const box = $('r-medals');
     box.textContent = '';
     for (const m of fresh) box.append(medalEl(m, false));
-    const next = mode === 'campaign' || mode === 'endless';
+    const next = (mode === 'campaign' || mode === 'endless') && !guest();
     $('r-next').hidden = !next;
+    $('r-retry').hidden = guest();
     $('r-next').textContent = mode === 'campaign' && n === L.count ? 'إلى ما بعد الرحلة' : 'المرحلة التالية';
-    $('r-map').textContent = mode === 'custom' ? 'المصمّم' : mode === 'daily' ? 'القائمة' : 'الرحلة';
+    $('r-map').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : mode === 'custom' ? 'المصمّم' : mode === 'daily' ? 'القائمة' : 'الرحلة';
+    if (guest()) $('r-why').textContent += ' · بانتظار المضيف ليختار ما بعدها';
     const stars = [...document.querySelectorAll('#result .result-stars .star')];
     stars.forEach(s => s.classList.remove('on'));
     $('result').hidden = false;
     for (let i = 0; i < r.stars; i++) { await wait(320); stars[i].classList.add('on'); TB.audio.play('coin'); }
   }
+  const backFromBattle = () => {
+    if (guest()) NET.leave(false);
+    else if (hosting()) goJourney();
+    else if (run.mode === 'custom') { hideOverlays(); game.state = 'idle'; show('editor'); }
+    else if (run.mode === 'daily') goMenu();
+    else goJourney();
+  };
   $('r-next').onclick = () => { const n = run.stage.n + 1; $('result').hidden = true; openBrief(L.get(n), n > L.count ? 'endless' : 'campaign'); };
-  $('r-retry').onclick = () => startStage(run);
-  $('r-map').onclick = () => (run.mode === 'custom' ? (hideOverlays(), game.state = 'idle', show('editor')) : run.mode === 'daily' ? goMenu() : goJourney());
+  $('r-retry').onclick = () => (hosting() ? NET.hostStart(run) : startStage(run));
+  $('r-map').onclick = backFromBattle;
 
   function showOver(r) {
     if (screen !== 'play') return;
@@ -592,7 +656,7 @@
     bank(r);
     persist();
     checkMedals(r);
-    $('o-reason').textContent = { well: 'سقط البئر في يد العقارب.', lives: 'نفدت دباباتك.', camels: 'لم تصل القافلة.', skins: 'سرق العقارب القِرَب.' }[r.reason] || '';
+    $('o-reason').textContent = { well: 'سقط البئر في يد العقارب.', lives: NET.active ? 'نفدت دباباتكم.' : 'نفدت دباباتك.', camels: 'لم تصل القافلة.', skins: 'سرق العقارب القِرَب.' }[r.reason] || '';
     $('o-score').textContent = fmt(r.score);
     const earned = $('o-earned');
     earned.textContent = '';
@@ -603,12 +667,15 @@
       'الدائرة الحمراء تعني قذيفة مدفعية قادمة: ابتعد عنها.', 'الصقر يدمّر أقرب ثلاثة أعداء دفعة واحدة.', 'جرّب الصعوبة «سهل» من الإعدادات.',
     ];
     $('o-tip').textContent = 'نصيحة: ' + TIPS[Math.floor(Math.random() * TIPS.length)];
-    $('o-map').textContent = run.mode === 'custom' ? 'المصمّم' : 'الرحلة';
+    $('o-map').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : run.mode === 'custom' ? 'المصمّم' : 'الرحلة';
+    $('o-retry').hidden = guest();
+    $('o-souq').hidden = NET.active;
+    if (guest()) $('o-tip').textContent = 'بانتظار المضيف ليبدأ جولة جديدة…';
     $('over').hidden = false;
   }
-  $('o-retry').onclick = () => startStage(run);
+  $('o-retry').onclick = () => (hosting() ? NET.hostStart(run) : startStage(run));
   $('o-souq').onclick = () => { hideOverlays(); game.state = 'idle'; buildSouq(); show('souq'); };
-  $('o-map').onclick = () => (run.mode === 'custom' ? (hideOverlays(), game.state = 'idle', show('editor')) : goJourney());
+  $('o-map').onclick = backFromBattle;
 
   let toastTimer = 0;
   function toast(text, icon) {
@@ -622,12 +689,27 @@
   }
 
   // ---------- HUD ----------
-  $('ico-p1').src = ICON.p1; $('ico-p2').src = ICON.p2; $('ico-well').src = ICON.well; $('ico-boss').src = ICON.boss;
+  $('ico-well').src = ICON.well; $('ico-boss').src = ICON.boss;
   $('ico-falcon').src = ICON.falcon; $('ico-falcon2').src = ICON.falcon;
   let hud = {};
   function pips(box, n, max) {
     if (box.children.length !== max) { box.textContent = ''; for (let i = 0; i < max; i++) box.append(el('i')); }
     [...box.children].forEach((p, i) => p.classList.toggle('on', i < n));
+  }
+  let chips = [];
+  function buildPlayerChips() {
+    const box = $('h-players');
+    box.textContent = '';
+    chips = game.players.map((pl, i) => {
+      const c = el('div', 'chip' + (NET.active && i === myPid ? ' me' : ''));
+      const lives = el('b'), hp = el('div', 'hp'), lvl = el('div', 'lvl');
+      for (let k = 0; k < 3; k++) lvl.append(el('i'));
+      c.append(img(ICON.players[i]));
+      if (names) c.append(el('span', 'nm', i === myPid ? 'أنت' : names[i] || ''));
+      c.append(lives, hp, lvl);
+      box.append(c);
+      return { c, lives, hp, lvl };
+    });
   }
   function updateHud() {
     const set = (key, value, fn) => { if (hud[key] !== value) { hud[key] = value; fn(value); } };
@@ -637,14 +719,15 @@
       $('h-stage').textContent = run.mode === 'daily' ? 'اليوم' : run.mode === 'custom' ? 'خريطتي' : run.mode === 'endless' ? 'ساحة ' + fmt(st.n - L.count) : fmt(st.n);
     });
     game.players.forEach((pl, i) => {
-      const t = pl.tank, k = i + 1;
-      set('p' + k, [pl.lives, t ? t.hp : 0, t ? t.max : 3 + game.upg.armor, pl.level].join(), () => {
-        $('h-lives' + k).textContent = fmt(Math.max(0, pl.lives));
-        pips($('h-hp' + k), t ? Math.max(0, t.hp) : 0, t ? t.max : 3 + game.upg.armor);
-        [...$('h-lvl' + k).children].forEach((s, j) => s.classList.toggle('on', j < pl.level));
+      const t = pl.tank, chip = chips[i], max = t ? t.max : 3 + ((pl.upg && pl.upg.armor) || 0);
+      if (!chip) return;
+      set('p' + i, [pl.lives, t ? t.hp : 0, max, pl.level, names && names[i]].join(), () => {
+        chip.lives.textContent = fmt(Math.max(0, pl.lives));
+        pips(chip.hp, t ? Math.max(0, t.hp) : 0, max);
+        [...chip.lvl.children].forEach((s, j) => s.classList.toggle('on', j < pl.level));
+        chip.c.classList.toggle('gone', pl.lives <= 0 && !t);
       });
     });
-    set('duo', game.nPlayers, n => { $('h-p2').hidden = n < 2; });
     set('score', game.score, v => { $('h-score').textContent = fmt(v); });
     const obj = game.objective();
     set('obj', obj.icon + obj.value + '/' + obj.max, () => {
@@ -660,16 +743,21 @@
       $('h-well').hidden = !w;
       if (w) pips($('h-wellhp'), Math.max(0, w.hp), w.max);
     });
-    const canFalcon = game.falcons > 0 && game.state === 'play' && game.tanks.some(t => t.team === 'e');
-    set('falcon', game.falcons + '' + canFalcon + game.nPlayers, () => {
-      $('h-falcons').textContent = fmt(game.falcons);
-      $('h-falcons2').textContent = fmt(game.falcons);
+    const local2 = game.nPlayers === 2 && !NET.active, falcons = game.falconsOf(myPid);
+    const canFalcon = falcons > 0 && game.state === 'play' && game.tanks.some(t => t.team === 'e');
+    set('falcon', falcons + '' + canFalcon + local2, () => {
+      $('h-falcons').textContent = fmt(falcons);
+      $('h-falcons2').textContent = fmt(falcons);
       $('b-falcon').disabled = !canFalcon;
-      $('b-falcon').hidden = game.nPlayers === 2 || (game.falcons === 0 && save.falcons === 0);
-      $('h-falcon2').hidden = game.nPlayers !== 2 || game.falcons === 0;
+      $('b-falcon').hidden = local2 || (falcons === 0 && save.falcons === 0);
+      $('h-falcon2').hidden = !local2 || falcons === 0;
     });
   }
-  const callFalcon = () => { TB.audio.init(); if (!game.useFalcon(0)) TB.audio.play('wall'); };
+  const callFalcon = () => {
+    TB.audio.init();
+    if (guest()) { if (game.falconsOf(myPid) > 0) NET.clientFalcon(); else TB.audio.play('wall'); return; }
+    if (!game.useFalcon(myPid)) TB.audio.play('wall');
+  };
   $('b-falcon').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); callFalcon(); });
   $('h-falcon2').onclick = callFalcon;
 
@@ -724,6 +812,21 @@
     cvx.imageSmoothingEnabled = false;
     cvx.drawImage(border, 0, 0, c.width, c.height);
     cvx.drawImage(game.render(), 8 * s, 8 * s, 208 * s, 208 * s);
+    if (names) {
+      cvx.font = '800 ' + Math.round(6 * s) + 'px ' + getComputedStyle(document.body).fontFamily;
+      cvx.textAlign = 'center';
+      cvx.lineJoin = 'round';
+      cvx.lineWidth = Math.max(2, s * 1.2);
+      cvx.strokeStyle = 'rgba(10,16,30,.85)';
+      game.players.forEach((pl, i) => {
+        const t = pl.tank;
+        if (!t) return;
+        const text = i === myPid ? 'أنت' : names[i] || '';
+        cvx.fillStyle = PLAYER_COLORS[i];
+        cvx.strokeText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
+        cvx.fillText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
+      });
+    }
     if (!game.popups.length) return;
     cvx.font = '900 ' + Math.round(7.5 * s) + 'px ' + getComputedStyle(document.body).fontFamily;
     cvx.textAlign = 'center';
@@ -754,7 +857,7 @@
   const zoneL = $('zoneL'), zoneR = $('zoneR'), fireR = zoneR.querySelector('[data-fire]'), fireL = zoneL.querySelector('[data-fire]'), padR = zoneR.querySelector('.dpad');
 
   function configureControls() {
-    const duo = game.nPlayers === 2;
+    const duo = game.nPlayers === 2 && !NET.active;
     $('play').classList.toggle('duo', duo);
     fireL.hidden = !duo;
     padR.hidden = !duo;
@@ -849,8 +952,9 @@
   const FIRE = [['Space', 'KeyJ', 'KeyK'], ['Enter', 'NumpadEnter', 'Numpad0', 'Slash', 'ShiftRight']];
   function keyOwner(code) {
     for (let i = 0; i < 2; i++) {
-      if (KEYS[i][code] !== undefined) return { pid: game.nPlayers === 2 ? i : 0, dir: KEYS[i][code] };
-      if (FIRE[i].includes(code)) return { pid: game.nPlayers === 2 ? i : 0, fire: true };
+      const pid = game.nPlayers === 2 && !NET.active ? i : 0;
+      if (KEYS[i][code] !== undefined) return { pid, dir: KEYS[i][code] };
+      if (FIRE[i].includes(code)) return { pid, fire: true };
     }
     return null;
   }
@@ -888,7 +992,8 @@
   function pollGamepads() {
     const pads = (navigator.getGamepads ? [...navigator.getGamepads()] : []).filter(Boolean);
     for (let i = 0; i < 2; i++) {
-      const gp = pads[i], pid = game.nPlayers === 2 ? i : 0, st = inputs[pid];
+      const duoPads = game.nPlayers === 2 && !NET.active;
+      const gp = pads[i], pid = duoPads ? i : 0, st = inputs[pid];
       if (!gp) { if (i === 0 || game.nPlayers === 2) { st.gp = -1; st.gpFire = false; } continue; }
       const b = k => gp.buttons[k] && gp.buttons[k].pressed;
       let dir = -1;
@@ -904,7 +1009,7 @@
       if (b(9) && !prev.start && screen === 'play') pause(!paused);
       if (b(3) && !prev.falcon && screen === 'play' && !paused) callFalcon();
       prev.start = b(9); prev.falcon = b(3);
-      if (game.nPlayers !== 2) break;
+      if (!duoPads) break;
     }
   }
 
@@ -916,20 +1021,25 @@
     last = now;
     if (gamepads) pollGamepads();
     if (screen !== 'play') return;
-    if (!paused) {
+    if (game.remote) {
+      // A guest only draws what the host sends, and sends back its stick and fire button
+      if (guest()) NET.clientFrame(now, dirOf(0), fireOf(0));
+    } else if (!paused) {
       acc += dt;
       let n = 0;
+      const local = NET.active ? 1 : game.nPlayers;
       while (acc >= STEP && n < 5) {
-        for (let i = 0; i < game.nPlayers; i++) { game.inputs[i].dir = dirOf(i); game.inputs[i].fire = fireOf(i); }
+        for (let i = 0; i < local; i++) { game.inputs[i].dir = dirOf(i); game.inputs[i].fire = fireOf(i); }
         game.update();
         acc -= STEP;
         n++;
       }
       if (n === 5) acc = 0;
+      if (hosting()) NET.hostFrame();
     } else acc = 0;
     draw();
     updateHud();
-    const p = game.players && game.players[0] && game.players[0].tank;
+    const p = game.players && game.players[myPid] && game.players[myPid].tank;
     TB.audio.engine(!paused && game.state === 'play' && p ? (p.moving ? 'move' : 'idle') : 'off');
   }
   requestAnimationFrame(frame);
@@ -1082,5 +1192,19 @@
   // ---------- boot ----------
   applySettings();
   show('menu');
-  TB.ui = { game, show, startStage, openBrief, settings, save, inputs };
+  TB.ui = {
+    game, show, startStage, openBrief, settings, save, inputs, ICON, fmt, gtoast, toast, powerupToast, dyingBanner, vibrate, codeDialog,
+    goMenu, hideOverlays, remoteEnd, remotePause, persist,
+    screen: () => screen,
+    saveSettings: () => store.set('settings', settings),
+    customMap: () => edMap.slice(),
+    pickOnline: () => { onlinePick = true; buildJourney(); show('journey'); },
+  };
+  NET.init();
+  // An invitation link (?room=CODE) opens the room straight away
+  const invited = new URLSearchParams(location.search).get('room');
+  if (invited) {
+    setTimeout(() => NET.open(TB.net.cleanCode(invited)), 60);
+    try { history.replaceState(null, '', location.pathname + (new URLSearchParams(location.search).get('peer') ? '?peer=' + new URLSearchParams(location.search).get('peer') : '')); } catch (e) { /* file:// */ }
+  }
 })();

@@ -8,6 +8,8 @@
   const PAL = {
     p1: [null, '#103B22', '#1F7A45', '#3FB36A', '#CBF7DA', '#F2B134'],
     p2: [null, '#0E2A4D', '#1C5DA6', '#4A9BE0', '#D6EDFF', '#F2B134'],
+    p3: [null, '#2E1350', '#6A35B0', '#9F6BE0', '#EADCFF', '#F2B134'],
+    p4: [null, '#5A2800', '#C25E0A', '#F08A2E', '#FFE3C6', '#FFFFFF'],
     enemy: [null, '#141317', '#38363F', '#625F6B', '#B5B2BE', '#D2412E'],
     bonus: [null, '#083A38', '#13807B', '#35C2B6', '#D8FFF9', '#F2B134'],
     hit: [null, '#6A6A6A', '#E4E4E4', '#FFFFFF', '#FFFFFF', '#FFFFFF'],

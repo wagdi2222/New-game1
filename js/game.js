@@ -9,7 +9,8 @@
   const EMPTY = 0, MUD = 1, STONE = 2, WATER = 3, PALM = 4, DUNE = 5, QUICK = 6;
   const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
   const WELL = { x: 96, y: 192 };
-  const P_SPAWN = [{ x: 64, y: 192 }, { x: 128, y: 192 }];
+  const P_SPAWN = [{ x: 64, y: 192 }, { x: 128, y: 192 }, { x: 32, y: 192 }, { x: 160, y: 192 }];
+  const PALETTES = ['p1', 'p2', 'p3', 'p4'];
   const TOP_SPAWNS = [{ x: 96, y: 0 }, { x: 192, y: 0 }, { x: 0, y: 0 }];
   const PLAYER_SPEED = 0.75;
 
@@ -60,7 +61,7 @@
       this.map = new Uint8Array(NC * NC);
       this.road = new Uint8Array(NC * NC);
       this.fx = S.effects();
-      this.inputs = [{ dir: -1, fire: false }, { dir: -1, fire: false }];
+      this.inputs = [0, 1, 2, 3].map(() => ({ dir: -1, fire: false }));
       this.state = 'idle';
       this.region = 'desert';
       this.waterFrame = 0;
@@ -81,14 +82,16 @@
     start(opts) {
       this.difficulty = DIFF[opts.difficulty] ? opts.difficulty : 'normal';
       this.diff = DIFF[this.difficulty];
-      this.nPlayers = opts.players === 2 ? 2 : 1;
-      this.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, opts.upgrades || {});
-      this.falcons = opts.falcons || 0;
+      this.nPlayers = Math.max(1, Math.min(4, opts.players || 1));
+      // Falcons: one shared pool on a single phone, or each online player's own
+      this.sharedFalcons = !Array.isArray(opts.falcons);
+      this.falcons = this.sharedFalcons ? opts.falcons || 0 : 0;
       this.stage = opts.stage;
-      this.score = 0; this.coins = 0;
+      this.score = 0; this.coins = 0; this.nextId = 1; this.cellLog = [];
       this.players = [];
       for (let i = 0; i < this.nPlayers; i++) {
-        this.players.push({ pid: i, lives: this.diff.lives, level: Math.min(3, this.upg.cannon), tank: null, respawn: 0, coffee: 0 });
+        const upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, (opts.playerUpgrades && opts.playerUpgrades[i]) || opts.upgrades || {});
+        this.players.push({ pid: i, upg, lives: this.diff.lives, level: Math.min(3, upg.cannon), tank: null, respawn: 0, coffee: 0, falcons: this.sharedFalcons ? 0 : opts.falcons[i] || 0 });
       }
       this.load();
     }
@@ -102,9 +105,9 @@
       const wellHp = this.diff.wellHp + (this.mission === 'boss' || this.mission === 'survive' ? 2 : 0);
       this.well = st.well ? { x: WELL.x, y: WELL.y, hp: wellHp, max: wellHp, dead: false, flash: 0, calm: 0 } : null;
       this.parse(st.rows, st.waypoints, !!st.well);
-      const coop = this.nPlayers === 2 ? 1.3 : 1;
+      const coop = 1 + 0.3 * (this.nPlayers - 1);
       this.queue = []; this.spawnCount = 0; this.need = 0; this.timer = 0; this.boss = null;
-      if (this.mission === 'defend') this.queue = this.makeQueue(Math.round((p.enemies || 20) * (this.nPlayers === 2 ? 1.25 : 1)));
+      if (this.mission === 'defend') this.queue = this.makeQueue(Math.round((p.enemies || 20) * (1 + 0.25 * (this.nPlayers - 1))));
       if (this.mission === 'collect') this.need = Math.max(1, this.skins.length - this.diff.skinAllow);
       if (this.mission === 'towers') for (const tw of this.towers) { tw.hp = tw.max = Math.round((p.towerHp || 6) * coop); }
       if (this.mission === 'survive') this.timer = this.timerMax = Math.round((p.seconds || 90) * 60 * this.diff.timeMul);
@@ -228,6 +231,7 @@
       if (this.map[i] === type) return;
       this.map[i] = type;
       this.paintCell(cx, cy);
+      if (this.logCells) this.cellLog.push(i, type);
     }
 
     cellAt(x, y) {
@@ -256,7 +260,7 @@
       const spec = team === 'p' ? null : kind < 0 ? BOSS : ENEMY[kind];
       const t = {
         team, kind, x, y, size: kind < 0 && team === 'e' ? 32 : 16, dir: team === 'p' ? 0 : 2,
-        hp: spec ? (kind < 0 ? this.bossHp : spec.hp) : 3 + this.upg.armor, bonus: false,
+        id: this.nextId++, hp: spec ? (kind < 0 ? this.bossHp : spec.hp) : 3, bonus: false,
         bullets: 0, cooldown: 0, anim: 0, moving: false, blocked: false, shield: 0, flash: 0, stun: 0,
         sink: 0, sandFree: 0, dead: false, aiTimer: 0, stuck: 0, burst: 0, burstTimer: 0, special: 60 + Math.random() * 120,
       };
@@ -360,7 +364,7 @@
     shoot(t, offset, speed, dmg, power) {
       const half = t.size / 2, perpX = DY[t.dir] !== 0 ? offset : 0, perpY = DX[t.dir] !== 0 ? offset : 0;
       this.bullets.push({
-        x: t.x + half + DX[t.dir] * (half - 2) + perpX, y: t.y + half + DY[t.dir] * (half - 2) + perpY,
+        id: this.nextId++, x: t.x + half + DX[t.dir] * (half - 2) + perpX, y: t.y + half + DY[t.dir] * (half - 2) + perpY,
         dir: t.dir, speed, dmg, power, owner: t, team: t.team, dead: false, age: 0,
       });
       t.bullets++;
@@ -376,7 +380,7 @@
       if (p.stun > 0) { p.stun--; p.moving = false; return; }
       if (this.state !== 'play') { p.moving = false; return; }
       if (this.sinking(p)) { p.moving = false; if (inp.fire) this.fire(p); return; }
-      const speed = PLAYER_SPEED * (1 + 0.1 * this.upg.engine) * (pl.coffee > 0 ? 1.6 : 1) * this.terrainFactor(p);
+      const speed = PLAYER_SPEED * (1 + 0.1 * pl.upg.engine) * (pl.coffee > 0 ? 1.6 : 1) * this.terrainFactor(p);
       if (inp.dir >= 0) {
         if (inp.dir !== p.dir) this.turn(p, inp.dir);
         p.moving = this.moveTank(p, speed);
@@ -398,7 +402,7 @@
     enemySpawner() {
       const spawning = this.mission === 'defend' ? this.queue.length > 0 : this.state === 'play';
       if (!spawning) return;
-      let cap = this.diff.maxOn + (this.nPlayers === 2 ? 1 : 0);
+      let cap = this.diff.maxOn + this.nPlayers - 1;
       if (this.mission === 'boss') cap = Math.max(1, cap - 2);
       if (this.mission === 'towers') cap = Math.min(cap, this.towers.filter(t => !t.dead).length + 2);
       const onField = this.tanks.filter(t => t.team === 'e' && !t.dead && t.kind >= 0).length + this.spawns.filter(s => s.team === 'e' && !s.big).length;
@@ -428,6 +432,7 @@
         if (--s.t > 0) continue;
         if (s.team === 'p') {
           const pl = this.players[s.pid], p = this.makeTank('p', 0, s.x, s.y, { pid: s.pid });
+          p.hp = p.max = 3 + pl.upg.armor;
           p.shield = this.diff.shield;
           pl.tank = p;
           this.tanks.push(p);
@@ -772,7 +777,7 @@
       this.effects.push({ x: p.x + 8, y: p.y + 8, kind: 'big', t: 0, light: true });
       this.sound('die');
       this.vibrate(220);
-      pl.level = Math.min(3, this.upg.cannon);
+      pl.level = Math.min(3, pl.upg.cannon);
       pl.lives--;
       this.stats.deaths++;
       if (pl.lives > 0) pl.respawn = 50;
@@ -825,7 +830,8 @@
     }
 
     lose(reason) {
-      if (this.state === 'over' || this.state === 'ended') return;
+      // Once the stage is won, a stray bullet or mine during the victory moment can't undo it
+      if (this.state !== 'play') return;
       this.state = 'over';
       this.endTimer = 0;
       this.loseReason = reason;
@@ -946,18 +952,20 @@
       const enemies = this.tanks.filter(t => t.team === 'e' && !t.dead);
       if (!enemies.length || !from) return false;
       enemies.sort((a, b) => dist(a, from) - dist(b, from));
-      this.birds.push({ x: from.x + 8, y: from.y + 8, targets: enemies.slice(0, 3), i: 0, t: 0, angle: -Math.PI / 2, leaving: false, pid: from.pid });
+      this.birds.push({ id: this.nextId++, x: from.x + 8, y: from.y + 8, targets: enemies.slice(0, 3), i: 0, t: 0, angle: -Math.PI / 2, leaving: false, pid: from.pid });
       this.stats.falconUses++;
       this.sound('falcon');
       return true;
     }
 
+    falconsOf(pid) { return this.sharedFalcons ? this.falcons : (this.players[pid] || {}).falcons || 0; }
+
     useFalcon(pid) {
       const pl = this.players[pid || 0];
-      if (this.state !== 'play' || this.falcons <= 0 || !pl || !pl.tank) return false;
+      if (this.state !== 'play' || this.falconsOf(pid || 0) <= 0 || !pl || !pl.tank) return false;
       if (!this.launchFalcon(pl.tank)) return false;
-      this.falcons--;
-      this.emit('falcons', this.falcons);
+      if (this.sharedFalcons) this.falcons--; else pl.falcons--;
+      this.emit('falcons', { pid: pid || 0, n: this.falconsOf(pid || 0), shared: this.sharedFalcons });
       return true;
     }
 
@@ -1085,6 +1093,7 @@
 
     // ---------- what the HUD shows ----------
     objective() {
+      if (this.remote) return this.remoteObjective || { icon: 'foe', value: 0 };
       const st = this.stats;
       switch (this.mission) {
         case 'defend': return { icon: 'foe', value: this.queue.length + this.tanks.filter(t => t.team === 'e').length + this.spawns.filter(s => s.team === 'e').length, label: 'الأعداء' };
@@ -1095,6 +1104,95 @@
         case 'boss': return { icon: 'boss', value: this.boss ? Math.max(0, this.boss.hp) : this.bossHp, max: this.bossHp, label: 'القلعة' };
       }
       return { icon: 'foe', value: 0 };
+    }
+
+    // ---------- online play: the host sends snapshots, the other phones only draw them ----------
+    snapshot() {
+      const q = v => Math.round(v * 4) / 4;
+      return {
+        t: this.t, st: this.state, sc: this.score, wf: this.waterFrame, wh: this.whirl, ms: this.mason, ob: this.objective(),
+        pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid)]),
+        tk: this.tanks.map(t => [t.id, t.team === 'p' ? 1 : 0, t.kind, t.pid == null ? -1 : t.pid, q(t.x), q(t.y), t.dir, t.hp, t.max,
+          t.anim & 255, t.shield > 0 ? 1 : 0, t.flash, t.bonus ? 1 : 0, t.stun, t.sink, t.moving ? 1 : 0]),
+        bu: this.bullets.map(b => [b.id, q(b.x), q(b.y), b.dir, b.team === 'p' ? 1 : 0, b.age]),
+        sh: this.shells.map(x => [q(x.sx), q(x.sy), q(x.tx), q(x.ty), x.t, x.dur]),
+        mi: this.mines.map(m => [m.x, m.y, m.t]),
+        tw: this.towers.map(t => [t.hp, t.max, t.dead ? 1 : 0, t.flash]),
+        ca: this.camels.map(c => [q(c.x), q(c.y), c.hp, c.max, c.left ? 1 : 0, c.anim, c.dead ? 1 : 0, c.arrived ? 1 : 0, c.flash]),
+        sk: this.skins.map(k => [k.taken === 'p' ? 1 : k.taken ? 2 : 0, k.steal || 0]),
+        pu: this.powerup ? [this.powerup.type, this.powerup.x, this.powerup.y, this.powerup.t] : null,
+        sp: this.spawns.map(x => [x.x, x.y, x.t, x.big ? 1 : 0]),
+        bi: this.birds.map(b => [b.id, q(b.x), q(b.y), Math.round(b.angle * 100) / 100, b.t]),
+        fx: this.effects.map(e => [q(e.x), q(e.y), e.kind, e.t, e.scale || 1, e.light ? 1 : 0]),
+        po: this.popups.map(x => [q(x.x), q(x.y), x.text, x.t]),
+        we: this.well ? [this.well.hp, this.well.max, this.well.dead ? 1 : 0, this.well.flash] : null,
+        tm: [this.timer, this.timerMax || 0],
+        ce: this.cellLog.splice(0),
+      };
+    }
+
+    applySnapshot(s, prev) {
+      this.remote = true;
+      this.t = s.t; this.state = s.st; this.score = s.sc; this.whirl = s.wh; this.mason = s.ms; this.remoteObjective = s.ob;
+      this.timer = s.tm[0]; this.timerMax = s.tm[1];
+      if (s.wf !== this.waterFrame) { this.waterFrame = s.wf; for (const i of this.animCells) this.paintCell(i % NC, Math.floor(i / NC)); }
+      for (let i = 0; i + 1 < s.ce.length; i += 2) {
+        const idx = s.ce[i];
+        if (idx < 0 || idx >= this.map.length) continue;
+        this.map[idx] = s.ce[i + 1];
+        this.paintCell(idx % NC, Math.floor(idx / NC));
+      }
+      s.pl.forEach((a, i) => {
+        const p = this.players[i];
+        if (!p) return;
+        p.lives = a[0]; p.level = a[1]; p.coffee = a[2]; p.falcons = a[3]; p.tank = null;
+      });
+      const before = id => prev && prev.get(id);
+      const moved = (o, x, y, id) => {
+        const b = before(id), known = b && b[0] != null;
+        o.nx = x; o.ny = y; o.px = known ? b[0] : x; o.py = known ? b[1] : y; o.x = x; o.y = y;
+        return o;
+      };
+      this.tanks = s.tk.map(a => {
+        const t = moved({ id: a[0], team: a[1] ? 'p' : 'e', kind: a[2], pid: a[3] < 0 ? undefined : a[3], dir: a[6], hp: a[7], max: a[8],
+          anim: a[9], shield: a[10], flash: a[11], bonus: !!a[12], stun: a[13], sink: a[14], moving: !!a[15] }, a[4], a[5], 't' + a[0]);
+        t.size = t.team === 'e' && t.kind < 0 ? 32 : 16;
+        if (t.team === 'p' && this.players[t.pid]) this.players[t.pid].tank = t;
+        return t;
+      });
+      this.boss = this.tanks.find(t => t.team === 'e' && t.kind < 0) || null;
+      this.bullets = s.bu.map(a => moved({ id: a[0], dir: a[3], team: a[4] ? 'p' : 'e', age: a[5] }, a[1], a[2], 'b' + a[0]));
+      this.shells = s.sh.map(a => ({ sx: a[0], sy: a[1], tx: a[2], ty: a[3], t: a[4], dur: a[5] }));
+      this.mines = s.mi.map(a => ({ x: a[0], y: a[1], t: a[2] }));
+      s.tw.forEach((a, i) => { const t = this.towers[i]; if (t) { t.hp = a[0]; t.max = a[1]; t.dead = !!a[2]; t.flash = a[3]; } });
+      s.ca.forEach((a, i) => {
+        const c = this.camels[i];
+        if (!c) return;
+        moved(c, a[0], a[1], 'c' + i);
+        c.hp = a[2]; c.max = a[3]; c.left = !!a[4]; c.anim = a[5]; c.dead = !!a[6]; c.arrived = !!a[7]; c.flash = a[8];
+      });
+      s.sk.forEach((a, i) => { const k = this.skins[i]; if (k) { k.taken = a[0] === 1 ? 'p' : a[0] === 2 ? 'e' : false; k.steal = a[1]; } });
+      this.powerup = s.pu ? { type: s.pu[0], x: s.pu[1], y: s.pu[2], t: s.pu[3] } : null;
+      this.spawns = s.sp.map(a => ({ x: a[0], y: a[1], t: a[2], big: !!a[3] }));
+      this.birds = s.bi.map(a => moved({ id: a[0], angle: a[3], t: a[4] }, a[1], a[2], 'f' + a[0]));
+      this.effects = s.fx.map(a => ({ x: a[0], y: a[1], kind: a[2], t: a[3], scale: a[4], light: !!a[5] }));
+      this.popups = s.po.map(a => ({ x: a[0], y: a[1], text: a[2], t: a[3] }));
+      if (s.we && this.well) { this.well.hp = s.we[0]; this.well.max = s.we[1]; this.well.dead = !!s.we[2]; this.well.flash = s.we[3]; }
+    }
+
+    // Positions of moving things in the last snapshot, so the next one can glide from them
+    positions() {
+      const m = new Map();
+      for (const t of this.tanks) m.set('t' + t.id, [t.nx, t.ny]);
+      for (const b of this.bullets) m.set('b' + b.id, [b.nx, b.ny]);
+      for (const b of this.birds) m.set('f' + b.id, [b.nx, b.ny]);
+      this.camels.forEach((c, i) => m.set('c' + i, [c.nx, c.ny]));
+      return m;
+    }
+
+    glide(k) {
+      const g = o => { if (o.nx == null) return; o.x = o.px + (o.nx - o.px) * k; o.y = o.py + (o.ny - o.py) * k; };
+      this.tanks.forEach(g); this.bullets.forEach(g); this.birds.forEach(g); this.camels.forEach(g);
     }
 
     // ---------- drawing ----------
@@ -1167,7 +1265,7 @@
 
     drawTank(g, t) {
       const fx = this.fx, design = this.designOf(t);
-      let pal = t.team === 'p' ? (t.pid ? 'p2' : 'p1') : 'enemy';
+      let pal = t.team === 'p' ? PALETTES[t.pid] || 'p1' : 'enemy';
       if (t.team === 'e' && t.bonus && (this.t >> 3) & 1) pal = 'bonus';
       if (t.flash > 0 && (t.flash >> 1) & 1) pal = 'hit';
       if (t.stun > 0 && (this.t >> 2) & 1) pal = 'stun';
@@ -1300,5 +1398,5 @@
   }
 
   TB.Game = Game;
-  TB.consts = { FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS };
+  TB.consts = { FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS, PALETTES };
 })();

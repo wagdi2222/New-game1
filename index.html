@@ -263,6 +263,36 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 #gtoast .badge img{width:24px;height:24px}
 #gtoast b{color:var(--gold)}
 
+/* ---------- online ---------- */
+.online-wrap{width:min(560px,100%);display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;font-weight:700}
+.field input,.codein{width:100%;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.3);padding:11px 14px;font-weight:700;-webkit-user-select:text;user-select:text}
+.field input:focus,.codein:focus{outline:2px solid var(--gold);outline-offset:1px}
+.codein{direction:ltr;text-align:center;letter-spacing:.3em;text-transform:uppercase;font-size:1.15rem}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+.roomcode{direction:ltr;display:inline-block;letter-spacing:.25em;color:var(--cream);background:rgba(0,0,0,.3);border-radius:10px;padding:0 10px}
+.btn.wa{background:linear-gradient(180deg,#3BD26A,#1FAF54);color:#062B14;box-shadow:0 4px 0 #13803C}
+.btn.wa:active{box-shadow:0 1px 0 #13803C}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.slot{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}
+.slot img{width:32px;height:32px;flex:none}
+.slot div{min-width:0}
+.slot b{display:block;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot small{color:var(--muted);font-size:.78rem}
+.slot.empty{border-style:dashed;opacity:.6}
+.slot.empty img{filter:grayscale(1) brightness(.6)}
+.spinner{width:44px;height:44px;border-radius:50%;border:4px solid rgba(242,177,52,.25);border-top-color:var(--gold);animation:spin 1s linear infinite;align-self:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hud-players{display:flex;gap:6px;flex-direction:inherit;align-items:inherit;flex-wrap:inherit}
+.chip.me{border-color:var(--gold)}
+.chip .nm{font-size:.72rem;color:var(--sand);max-width:64px;overflow:hidden;text-overflow:ellipsis}
+.chip.gone{opacity:.45}
+#on-join{flex:none;min-width:96px;white-space:nowrap}
+#netwarn{position:absolute;bottom:6%;left:50%;transform:translateX(-50%);z-index:2;background:rgba(10,16,30,.88);border:1px solid rgba(242,177,52,.4);
+  border-radius:99px;padding:5px 14px;font-weight:800;font-size:.85rem;white-space:nowrap;display:flex;align-items:center;gap:8px;pointer-events:none}
+#netwarn .spinner{width:16px;height:16px;border-width:3px}
+
 /* ---------- editor ---------- */
 #editor{display:grid;place-items:stretch;padding-bottom:max(10px,env(safe-area-inset-bottom));grid-template-columns:auto 1fr;grid-template-areas:"tools board";gap:12px;overflow:hidden;touch-action:none}
 #editor.port{grid-template-columns:1fr;grid-template-rows:auto 1fr;grid-template-areas:"board" "tools"}
@@ -291,9 +321,10 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     </div>
     <div class="menu-btns">
       <button class="btn" id="b-journey"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg><span id="b-journey-label">ابدأ الرحلة</span></button>
+      <button class="btn wa" id="b-online">العب مع أصدقائك عبر الإنترنت</button>
       <div class="duo">
         <button class="btn ghost" id="b-daily">تحدي اليوم</button>
-        <button class="btn ghost" id="b-coop">لاعبان معاً</button>
+        <button class="btn ghost" id="b-coop">لاعبان على جوال</button>
       </div>
       <div class="duo">
         <button class="btn ghost" id="b-souq">السوق</button>
@@ -318,6 +349,37 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
   <button class="btn ghost endless" id="b-endless" hidden></button>
 </section>
 
+<!-- online room -->
+<section id="online" class="screen" hidden>
+  <div class="top"><h2>العب مع أصدقائك</h2><button class="back" id="on-back">رجوع</button></div>
+  <div class="online-wrap">
+    <div class="card" id="on-start">
+      <label class="field">اسمك في اللعبة<input id="on-name" maxlength="12" autocomplete="nickname" placeholder="مثلاً: صقر الصحراء"></label>
+      <p id="on-join-hint" hidden>وصلتك دعوة! اكتب اسمك ثم ادخل الغرفة.</p>
+      <div class="row"><input class="codein" id="on-code" maxlength="5" placeholder="رمز الغرفة" autocomplete="off" spellcheck="false"><button class="btn" id="on-join">ادخل الغرفة</button></div>
+      <div class="or">أو</div>
+      <button class="btn ghost" id="on-create">أنشئ غرفة وادعُ أصدقاءك</button>
+      <p>حتى أربعة لاعبين عبر الإنترنت (واي فاي أو بيانات الجوال). ويمكن لأصدقائك اللعب من المتصفح دون تثبيت.</p>
+    </div>
+    <div class="card" id="on-busy" hidden>
+      <div class="spinner"></div>
+      <p id="on-busy-text">نتصل…</p>
+      <button class="btn ghost" id="on-cancel">إلغاء</button>
+    </div>
+    <div class="card" id="on-room" hidden>
+      <h2>الغرفة <span class="roomcode" id="on-roomcode"></span></h2>
+      <div class="row"><button class="btn wa" id="on-wa">ادعُ عبر واتساب</button><button class="btn ghost" id="on-share">شارك الرابط</button></div>
+      <div class="slots" id="on-slots"></div>
+      <div id="on-hostctl" style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn" id="on-pick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>اختر المرحلة وابدأ</button>
+        <div class="row"><button class="btn ghost" id="on-daily">تحدي اليوم</button><button class="btn ghost" id="on-mymap">خريطتي</button></div>
+      </div>
+      <p id="on-wait">بانتظار المضيف ليختار المرحلة…</p>
+      <button class="btn ghost" id="on-leave">اخرج من الغرفة</button>
+    </div>
+  </div>
+</section>
+
 <!-- souq -->
 <section id="souq" class="screen" hidden>
   <div class="top"><h2>السوق</h2><span class="pill"><i class="coin"></i><b id="s-coins">٠</b> درهم</span><button class="back" data-back>رجوع</button></div>
@@ -340,6 +402,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <section><h3>التحكم</h3><ul>
       <li>اسحب إبهامك على لوحة الاتجاهات للتحرك، واضغط زر النار (مطولاً للإطلاق المتواصل). زر الصقر يستدعي صقراً اشتريته من السوق.</li>
       <li>لاعبان على جوال واحد: كل لاعب له جهة من الشاشة فيها لوحة اتجاهات وزر نار. يُفضّل وضع الجوال أفقياً.</li>
+      <li>العب مع أصدقائك عبر الإنترنت: أنشئ غرفة وأرسل رابطها على واتساب، فيدخل معك حتى ثلاثة أصدقاء كل من جواله، ولو من المتصفح دون تثبيت. يختار صاحب الغرفة المرحلة، ويشترك الجميع في حماية البئر.</li>
       <li>لوحة المفاتيح: <kbd>WASD</kbd> و<kbd>Space</kbd> للاعب الأول، و<kbd>الأسهم</kbd> و<kbd>Enter</kbd> للثاني، و<kbd>F</kbd> للصقر، و<kbd>P</kbd> للإيقاف. يد التحكم مدعومة.</li>
     </ul></section>
     <section><h3>الأرض</h3><div class="items" id="help-terrain"></div></section>
@@ -396,8 +459,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <section id="play" hidden>
   <div class="hud" id="hudA">
     <div class="chip" id="h-stage-chip"><img class="px" id="ico-region" alt=""><b id="h-stage"></b></div>
-    <div class="chip" id="h-p1"><img class="px" id="ico-p1" alt=""><b id="h-lives1">٣</b><div class="hp" id="h-hp1"></div><div class="lvl" id="h-lvl1"><i></i><i></i><i></i></div></div>
-    <div class="chip" id="h-p2" hidden><img class="px" id="ico-p2" alt=""><b id="h-lives2">٣</b><div class="hp" id="h-hp2"></div><div class="lvl" id="h-lvl2"><i></i><i></i><i></i></div></div>
+    <div class="hud-players" id="h-players"></div>
   </div>
   <div class="hud" id="hudB">
     <div class="chip"><small>النقاط</small><b id="h-score">٠</b></div>
@@ -411,6 +473,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <canvas id="cv" width="224" height="224"></canvas>
     <div id="toast"></div>
     <div id="banner"></div>
+    <div id="netwarn" hidden><i class="spinner"></i>الاتصال بالمضيف ضعيف…</div>
     <div id="curtain"><div class="txt"><b id="c-title"></b><span id="c-sub"></span></div></div>
     <div id="rotate" hidden>أدر الجوال أفقياً ليتسع المكان للاعبين</div>
   </div>
@@ -495,6 +558,8 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <script src="js/sprites.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
+<script src="js/net.js"></script>
+<script src="js/online.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

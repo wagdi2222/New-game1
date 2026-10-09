@@ -1,11 +1,19 @@
 // Guardians of the Oasis offline cache: serve from cache at once, refresh it from the network in the background
-const CACHE = 'waha-v1';
+const CACHE = 'waha-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
-  'js/levels.js', 'js/sprites.js', 'js/audio.js', 'js/game.js', 'js/ui.js'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
+  'js/levels.js', 'js/sprites.js', 'js/audio.js', 'js/game.js', 'js/net.js', 'js/online.js', 'js/ui.js', 'js/vendor/peerjs.min.js'];
+self.addEventListener('install', e => {
+  // Skip the browser's HTTP cache so a new version never stores files from the old one
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))));
+  self.skipWaiting();
+});
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => (k.startsWith('waha-') || k.startsWith('tank-battle-')) && k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
+  e.waitUntil(caches.keys()
+    .then(ks => Promise.all(ks.filter(k => (k.startsWith('waha-') || k.startsWith('tank-battle-')) && k !== CACHE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim())
+    // A friend who opened an invite link on an older cached copy reloads into this version to join the room
+    .then(() => self.clients.matchAll({ type: 'window' }))
+    .then(cs => cs.forEach(c => { if (new URL(c.url).searchParams.has('room')) c.navigate(c.url).catch(() => {}); })));
 });
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);

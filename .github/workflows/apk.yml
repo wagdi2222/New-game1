@@ -34,6 +34,7 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk tank-battle.apk
           unzip -l tank-battle.apk | grep -q 'assets/www/js/game.js'
+          unzip -l tank-battle.apk | grep -q 'assets/www/js/vendor/peerjs.min.js'
           ls -l tank-battle.apk
 
       - uses: actions/upload-artifact@v4

@@ -113,10 +113,25 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    static class Bridge {
+    class Bridge {
         @JavascriptInterface
         public String platform() {
             return "android";
+        }
+
+        // Opens Android's share sheet (WhatsApp, Telegram, SMS...) with the room invitation
+        @JavascriptInterface
+        public void share(String text) {
+            runOnUiThread(() -> {
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/plain");
+                send.putExtra(Intent.EXTRA_TEXT, text);
+                try {
+                    startActivity(Intent.createChooser(send, null));
+                } catch (ActivityNotFoundException e) {
+                    // nothing can share text: the page falls back to showing the link
+                }
+            });
         }
     }
 }
