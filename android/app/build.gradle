@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI run number keeps versionCode increasing so a new APK installs over the old one
+def run = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
+// The game is the web app at the repository root; bundle it as assets/www
+def webOut = layout.buildDirectory.dir('generated/web').get().asFile
+def copyWeb = tasks.register('copyWeb', Sync) {
+    from(rootProject.file('..')) {
+        include 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'js/**'
+    }
+    into new File(webOut, 'www')
+}
+
+android {
+    namespace 'io.github.wagdi2222.tankbattle'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.wagdi2222.tankbattle'
+        minSdk 24
+        targetSdk 34
+        versionCode run
+        versionName "1.0.$run"
+    }
+
+    // Shared key for sideloaded builds, so each new APK can update the installed one.
+    // It is public in this repository: use your own key before publishing to a store.
+    signingConfigs {
+        release {
+            storeFile rootProject.file('tankbattle.keystore')
+            storePassword 'tankbattle'
+            keyAlias 'tankbattle'
+            keyPassword 'tankbattle'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+    }
+
+    sourceSets {
+        main.assets.srcDir(webOut)
+    }
+}
+
+tasks.named('preBuild') { dependsOn copyWeb }
+tasks.matching { it.name.endsWith('Assets') }.configureEach { dependsOn copyWeb }
