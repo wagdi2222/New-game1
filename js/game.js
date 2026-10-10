@@ -61,7 +61,7 @@
       this.map = new Uint8Array(NC * NC);
       this.road = new Uint8Array(NC * NC);
       this.fx = S.effects();
-      this.inputs = [0, 1, 2, 3].map(() => ({ dir: -1, fire: false }));
+      this.inputs = [0, 1, 2, 3].map(() => ({ dir: -1, alt: -1, fire: false }));
       this.state = 'idle';
       this.region = 'desert';
       this.waterFrame = 0;
@@ -305,6 +305,20 @@
       t.dir = dir;
     }
 
+    // Could the vehicle take a step that way, after the grid snap a turn would make?
+    canGo(t, dir) {
+      let x = t.x, y = t.y;
+      if ((dir & 1) !== (t.dir & 1)) {
+        const alongX = (t.dir & 1) === 1, v = alongX ? x : y;
+        const near = Math.round(v / 8) * 8, far = near > v ? Math.floor(v / 8) * 8 : Math.ceil(v / 8) * 8;
+        for (const c of [near, far]) {
+          const nx = alongX ? c : x, ny = alongX ? y : c;
+          if (c === v || !this.tankBlocked(t, nx, ny)) { x = nx; y = ny; break; }
+        }
+      }
+      return !this.tankBlocked(t, x + DX[dir], y + DY[dir]);
+    }
+
     moveTank(t, dist) {
       const dx = DX[t.dir], dy = DY[t.dir];
       let moved = false;
@@ -381,8 +395,11 @@
       if (this.state !== 'play') { p.moving = false; return; }
       if (this.sinking(p)) { p.moving = false; if (inp.fire) this.fire(p); return; }
       const speed = PLAYER_SPEED * (1 + 0.1 * pl.upg.engine) * (pl.coffee > 0 ? 1.6 : 1) * this.terrainFactor(p);
-      if (inp.dir >= 0) {
-        if (inp.dir !== p.dir) this.turn(p, inp.dir);
+      let dir = inp.dir;
+      // Stick pushed between two directions: while the main way is blocked, slide along the other one
+      if (dir >= 0 && inp.alt >= 0 && (inp.alt & 1) !== (dir & 1) && !this.canGo(p, dir) && this.canGo(p, inp.alt)) dir = inp.alt;
+      if (dir >= 0) {
+        if (dir !== p.dir) this.turn(p, dir);
         p.moving = this.moveTank(p, speed);
       } else p.moving = false;
       if (p.moving) p.anim++;

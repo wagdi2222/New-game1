@@ -36,6 +36,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;touch-action:pan-y;
   padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 .overlay{position:fixed;inset:0;z-index:20;display:flex;background:rgba(6,10,20,.78);padding:16px;overflow-y:auto;touch-action:pan-y}
+#settings{z-index:21}
 .overlay>.card{margin:auto}
 .card{position:relative;width:min(460px,100%);background:linear-gradient(180deg,var(--indigo-2),var(--indigo));border:1px solid rgba(242,177,52,.35);
   border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden}
@@ -212,6 +213,11 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 .dpad .arr{fill:#8FA3C4}
 .dpad .arm.on + .arr{fill:#2A1800}
 .dpad .hub{fill:#14243F}
+.dpad.stick .base{fill:rgba(14,26,48,.82);stroke:#3F5F92;stroke-width:2}
+.dpad.stick .ring{fill:none;stroke:#2C4470;stroke-width:2;stroke-dasharray:3 6}
+.dpad.stick .arr{fill:#3F5F92;transition:fill .08s}
+.dpad.stick .arr.half{fill:#8A6A24}
+.dpad.stick .arr.on{fill:var(--gold)}
 .tiltview{width:var(--pad);height:var(--pad);flex:none}
 .tiltview svg{width:100%;height:100%;display:block;overflow:visible}
 .tiltview .ring{fill:rgba(20,36,63,.75);stroke:#3F5F92;stroke-width:2}
@@ -409,6 +415,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <section><h3>المهام</h3><div class="items" id="help-missions"></div></section>
     <section><h3>التحكم</h3><ul>
       <li>اسحب إبهامك على لوحة الاتجاهات للتحرك، واضغط زر النار (مطولاً للإطلاق المتواصل). زر الصقر يستدعي صقراً اشتريته من السوق.</li>
+      <li>عصا التحكم: اختر «عصا» من الإعدادات لتتحرك بعصا مثل يد البلايستيشن. ادفعها مائلة بين جهتين، وإذا انسدّ الطريق في الجهة الأولى انزلقت الدبابة في الثانية حتى تجد منفذاً.</li>
       <li>إمالة الجوال: اختر «إمالة الجوال» من الإعدادات، ثم أمِل الجوال نحو الجهة التي تريد أن تسير إليها الدبابة. تُضبط الإمالة على وضع يدك عند بداية كل معركة، والمس دائرة الإمالة لضبطها من جديد.</li>
       <li>لاعبان على جوال واحد: كل لاعب له جهة من الشاشة فيها لوحة اتجاهات وزر نار. يُفضّل وضع الجوال أفقياً.</li>
       <li>العب مع أصدقائك عبر الإنترنت: أنشئ غرفة وأرسل رابطها على واتساب، فيدخل معك حتى ثلاثة أصدقاء كل من جواله، ولو من المتصفح دون تثبيت. يختار صاحب الغرفة المرحلة، ويشترك الجميع في حماية البئر.</li>
@@ -435,7 +442,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <div class="set-row"><label>الأرقام</label>
       <div class="seg" id="s-digits"><button data-v="arabic">١٢٣</button><button data-v="latin">123</button></div></div>
     <div class="set-row"><label>التحريك</label>
-      <div class="seg" id="s-move"><button data-v="pad">الأزرار</button><button data-v="tilt">إمالة الجوال</button></div></div>
+      <div class="seg" id="s-move"><button data-v="pad">أزرار</button><button data-v="stick">عصا</button><button data-v="tilt">إمالة</button></div></div>
     <div class="set-row" id="s-tilt-row"><label>حساسية الإمالة</label>
       <div class="seg" id="s-tiltsens"><button data-v="low">منخفضة</button><button data-v="mid">متوسطة</button><button data-v="high">عالية</button></div></div>
     <div class="set-row"><label>حجم أزرار التحكم</label>

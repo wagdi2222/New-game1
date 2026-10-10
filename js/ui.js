@@ -850,8 +850,35 @@
     '<path class="arm" data-d="2" d="M-22,8 L-22,62 Q-22,70 -14,70 L14,70 Q22,70 22,62 L22,8 L0,-12 Z"/><path class="arr" d="M0,58 L11,42 L-11,42 Z"/>' +
     '<path class="arm" data-d="3" d="M-8,-22 L-62,-22 Q-70,-22 -70,-14 L-70,14 Q-70,22 -62,22 L-8,22 L12,0 Z"/><path class="arr" d="M-58,0 L-42,11 L-42,-11 Z"/>' +
     '<circle class="hub" r="18"/></svg>';
-  for (const d of document.querySelectorAll('.dpad')) d.innerHTML = PAD_SVG;
-  const newInput = () => ({ pad: -1, padId: null, anchor: null, padEl: null, fires: new Set(), keys: [], keyFire: false, gp: -1, gpFire: false });
+  // A thumbstick like a game controller's: the cap follows the thumb in any direction
+  const STICK_SVG = k => '<svg viewBox="-80 -80 160 160" aria-hidden="true"><defs>' +
+    '<radialGradient id="ske' + k + '" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#55648A"/><stop offset=".55" stop-color="#28324D"/><stop offset="1" stop-color="#121827"/></radialGradient>' +
+    '<radialGradient id="skt' + k + '" cx=".5" cy=".62" r=".7"><stop offset="0" stop-color="#1A2236"/><stop offset="1" stop-color="#3A4766"/></radialGradient></defs>' +
+    '<circle class="base" r="74"/><circle class="ring" r="48"/>' +
+    '<path class="arr" data-d="0" d="M0,-70 L9,-59 L-9,-59 Z"/><path class="arr" data-d="1" d="M70,0 L59,9 L59,-9 Z"/>' +
+    '<path class="arr" data-d="2" d="M0,70 L9,59 L-9,59 Z"/><path class="arr" data-d="3" d="M-70,0 L-59,9 L-59,-9 Z"/>' +
+    '<g class="knob"><circle r="32" cy="6" fill="rgba(0,0,0,.35)"/><circle r="31" fill="url(#ske' + k + ')" stroke="#0B1020" stroke-width="2"/>' +
+    '<circle r="23" fill="url(#skt' + k + ')"/><circle r="23" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="5" stroke-dasharray="1.5 4"/>' +
+    '<path d="M-21,-12 A24,24 0 0 1 -6,-23" stroke="rgba(255,255,255,.35)" stroke-width="3" fill="none" stroke-linecap="round"/></g></svg>';
+  const STICK_TRAVEL = 46; // how far the cap can leave the center, in the stick's 160-unit drawing
+  function padStyle() {
+    const kind = settings.move === 'stick' ? 'stick' : 'pad';
+    for (const d of document.querySelectorAll('.dpad')) {
+      if (d.dataset.kind === kind) continue;
+      d.dataset.kind = kind;
+      d.innerHTML = kind === 'stick' ? STICK_SVG(d.dataset.pad) : PAD_SVG;
+      d.classList.toggle('stick', kind === 'stick');
+    }
+  }
+  padStyle();
+  // Pushed between two directions: the other direction counts too when it's clearly part of the push
+  function secondDir(dx, dy, d) {
+    if (d < 0) return -1;
+    const major = d & 1 ? Math.abs(dx) : Math.abs(dy), minor = d & 1 ? dy : dx;
+    if (Math.abs(minor) < major * 0.42) return -1;
+    return d & 1 ? (minor > 0 ? 2 : 0) : (minor > 0 ? 1 : 3);
+  }
+  const newInput = () => ({ pad: -1, alt: -1, padId: null, anchor: null, rest: null, padEl: null, fires: new Set(), keys: [], keyFire: false, gp: -1, gpAlt: -1, gpFire: false });
   const inputs = [newInput(), newInput()];
   const pointers = new Map();
   const zoneL = $('zoneL'), zoneR = $('zoneR'), fireR = zoneR.querySelector('[data-fire]'), fireL = zoneL.querySelector('[data-fire]'), padR = zoneR.querySelector('.dpad');
@@ -863,7 +890,7 @@
     '<path class="arr" data-d="0" d="M0,-68 L13,-51 L-13,-51 Z"/><path class="arr" data-d="1" d="M68,0 L51,13 L51,-13 Z"/>' +
     '<path class="arr" data-d="2" d="M0,68 L13,51 L-13,51 Z"/><path class="arr" data-d="3" d="M-68,0 L-51,13 L-51,-13 Z"/><circle class="dot" r="13"/></svg>';
   const tiltDot = tiltView.querySelector('.dot'), tiltArrows = [...tiltView.querySelectorAll('.arr')];
-  const tilt = { raw: null, zero: null, vec: [0, 0], dir: -1, at: -1e9, listening: false };
+  const tilt = { raw: null, zero: null, vec: [0, 0], dir: -1, alt: -1, at: -1e9, listening: false };
   const TILT_ON = { low: 0.2, mid: 0.13, high: 0.08 }; // sine of the tilt that starts the tank: about 12°, 7.5° and 4.5°
   const tiltMode = () => settings.move === 'tilt' && !(game.nPlayers === 2 && !NET.active);
   function screenAngle() {
@@ -886,6 +913,7 @@
     if (Math.max(ax, ay) > (tilt.dir >= 0 ? on * 0.65 : on)) d = ax > ay ? (vx > 0 ? 1 : 3) : (vy > 0 ? 0 : 2);
     if (d >= 0 && tilt.dir >= 0 && (d & 1) !== (tilt.dir & 1) && (tilt.dir & 1 ? ay / Math.max(1e-3, ax) : ax / Math.max(1e-3, ay)) < 1.3) d = tilt.dir;
     tilt.dir = d;
+    tilt.alt = secondDir(vx, -vy, d);
   }
   function listenTilt() {
     if (tilt.listening) return;
@@ -893,7 +921,7 @@
     window.addEventListener('deviceorientation', onOrientation);
   }
   // Whatever way the phone is held now counts as level
-  function calibrate() { tilt.zero = tilt.raw ? tilt.raw.slice() : null; tilt.vec = [0, 0]; tilt.dir = -1; }
+  function calibrate() { tilt.zero = tilt.raw ? tilt.raw.slice() : null; tilt.vec = [0, 0]; tilt.dir = -1; tilt.alt = -1; }
   // iPhones ask before sharing the motion sensor, and only after a tap
   async function tiltPermission() {
     const D = window.DeviceOrientationEvent;
@@ -938,6 +966,7 @@
   function configureControls() {
     const duo = game.nPlayers === 2 && !NET.active, tilted = tiltMode();
     $('play').classList.toggle('duo', duo);
+    padStyle();
     padL.hidden = tilted;
     tiltView.hidden = !tilted;
     $('hint-move').textContent = tilted ? 'أمِل الجوال · المس لضبطها' : 'الحركة';
@@ -951,8 +980,8 @@
   function resetInput() {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     for (const st of inputs) {
-      st.pad = -1; st.padId = null; st.anchor = null; st.fires.clear(); st.keys = []; st.keyFire = false;
-      if (st.padEl) { st.padEl.style.transform = ''; st.padEl.classList.remove('float'); }
+      st.pad = -1; st.alt = -1; st.padId = null; st.anchor = null; st.fires.clear(); st.keys = []; st.keyFire = false;
+      if (st.padEl) { st.padEl.style.transform = ''; st.padEl.classList.remove('float'); knobTo(st.padEl, 0, 0); }
     }
     pointers.clear();
     paintAll();
@@ -960,7 +989,12 @@
   function paintAll() {
     for (const d of document.querySelectorAll('.dpad')) {
       const st = inputs[+d.dataset.pad];
-      d.querySelectorAll('.arm').forEach(a => a.classList.toggle('on', st.padEl === d && +a.dataset.d === st.pad));
+      const mine = st.padEl === d;
+      d.querySelectorAll('.arm').forEach(a => a.classList.toggle('on', mine && +a.dataset.d === st.pad));
+      d.querySelectorAll('.stick .arr').forEach(a => {
+        a.classList.toggle('on', mine && +a.dataset.d === st.pad);
+        a.classList.toggle('half', mine && +a.dataset.d === st.alt);
+      });
     }
     for (const f of document.querySelectorAll('[data-fire]')) {
       const st = inputs[+f.dataset.fire];
@@ -974,6 +1008,22 @@
     if (st.gp >= 0) return st.gp;
     return i === 0 && tiltMode() ? tilt.dir : -1;
   };
+  // The second direction of a diagonal push, so the tank can slide around corners
+  const altOf = i => {
+    const st = inputs[i];
+    if (st.pad >= 0) return st.alt;
+    if (st.keys.length) {
+      const d = st.keys[st.keys.length - 1];
+      for (let k = st.keys.length - 2; k >= 0; k--) if ((st.keys[k] & 1) !== (d & 1)) return st.keys[k];
+      return -1;
+    }
+    if (st.gp >= 0) return st.gpAlt;
+    return i === 0 && tiltMode() ? tilt.alt : -1;
+  };
+  function knobTo(pad, x, y) {
+    const k = pad && pad.querySelector('.knob');
+    if (k) k.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
+  }
   const fireOf = i => { const st = inputs[i]; return st.fires.size > 0 || st.keyFire || st.gpFire; };
   const inside = (elm, e, slack) => { const r = elm.getBoundingClientRect(); return e.clientX >= r.left - slack && e.clientX <= r.right + slack && e.clientY >= r.top - slack && e.clientY <= r.bottom + slack; };
 
@@ -1006,6 +1056,7 @@
     pointers.set(e.pointerId, { type: 'pad', pid });
     pad.style.transform = '';
     const r = pad.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    st.rest = { x: cx, y: cy };
     if (Math.hypot(e.clientX - cx, e.clientY - cy) <= r.width * 0.58) st.anchor = { x: cx, y: cy };
     else {
       st.anchor = { x: e.clientX, y: e.clientY };
@@ -1015,15 +1066,30 @@
     padMove(pid, e);
   }
   function padMove(pid, e) {
-    const st = inputs[pid], dx = e.clientX - st.anchor.x, dy = e.clientY - st.anchor.y;
+    const st = inputs[pid], w = st.padEl.offsetWidth || 1, stick = st.padEl.classList.contains('stick');
+    let dx = e.clientX - st.anchor.x, dy = e.clientY - st.anchor.y, dist = Math.hypot(dx, dy);
+    if (stick) {
+      // The stick's base follows a thumb that drifts too far, so it never runs off the stick
+      const travel = w * STICK_TRAVEL / 160, slack = travel * 1.35;
+      if (dist > slack) {
+        const k = (dist - slack) / dist;
+        st.anchor.x += dx * k; st.anchor.y += dy * k;
+        dx -= dx * k; dy -= dy * k; dist = slack;
+        st.padEl.classList.add('float');
+        st.padEl.style.transform = 'translate(' + (st.anchor.x - st.rest.x) + 'px,' + (st.anchor.y - st.rest.y) + 'px)';
+      }
+      const m = Math.min(1, travel / Math.max(1e-6, dist)), u = 160 / w;
+      knobTo(st.padEl, dx * m * u, dy * m * u);
+    }
     let d = -1;
-    if (Math.hypot(dx, dy) > st.padEl.offsetWidth * 0.1) d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+    if (dist > w * (stick ? 0.075 : 0.1)) d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
     // Keep the current axis until the other one clearly wins, so diagonals don't flicker
     if (d >= 0 && st.pad >= 0 && (d & 1) !== (st.pad & 1)) {
       const ratio = st.pad & 1 ? Math.abs(dy) / Math.max(1, Math.abs(dx)) : Math.abs(dx) / Math.max(1, Math.abs(dy));
       if (ratio < 1.3) d = st.pad;
     }
-    if (d !== st.pad) { st.pad = d; paintAll(); }
+    const alt = secondDir(dx, dy, d);
+    if (d !== st.pad || alt !== st.alt) { st.pad = d; st.alt = alt; paintAll(); }
   }
   function pointerEnd(e) {
     const p = pointers.get(e.pointerId);
@@ -1032,8 +1098,8 @@
     const st = inputs[p.pid];
     if (p.type === 'fire') st.fires.delete(e.pointerId);
     else if (st.padId === e.pointerId) {
-      st.padId = null; st.pad = -1; st.anchor = null;
-      if (st.padEl) { st.padEl.classList.remove('float'); st.padEl.style.transform = ''; }
+      st.padId = null; st.pad = -1; st.alt = -1; st.anchor = null;
+      if (st.padEl) { st.padEl.classList.remove('float'); st.padEl.style.transform = ''; knobTo(st.padEl, 0, 0); }
     }
     paintAll();
   }
@@ -1092,13 +1158,18 @@
       const gp = pads[i], pid = duoPads ? i : 0, st = inputs[pid];
       if (!gp) { if (i === 0 || game.nPlayers === 2) { st.gp = -1; st.gpFire = false; } continue; }
       const b = k => gp.buttons[k] && gp.buttons[k].pressed;
-      let dir = -1;
-      if (b(12)) dir = 0; else if (b(15)) dir = 1; else if (b(13)) dir = 2; else if (b(14)) dir = 3;
-      else {
+      let dir = -1, alt = -1;
+      const held = [b(12) ? 0 : -1, b(15) ? 1 : -1, b(13) ? 2 : -1, b(14) ? 3 : -1].filter(d => d >= 0);
+      if (held.length) {
+        dir = held[0];
+        alt = held.find(d => (d & 1) !== (dir & 1));
+        if (alt === undefined) alt = -1;
+      } else {
         const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
         if (Math.max(Math.abs(ax), Math.abs(ay)) > 0.5) dir = Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 1 : 3) : (ay > 0 ? 2 : 0);
+        alt = secondDir(ax, ay, dir);
       }
-      st.gp = dir;
+      st.gp = dir; st.gpAlt = alt;
       const fire = b(0) || b(1) || b(5) || b(7);
       if (fire !== st.gpFire) { st.gpFire = fire; paintAll(); }
       const prev = gpPrev[i];
@@ -1119,13 +1190,13 @@
     if (screen !== 'play') return;
     if (game.remote) {
       // A guest only draws what the host sends, and sends back its stick and fire button
-      if (guest()) NET.clientFrame(now, dirOf(0), fireOf(0));
+      if (guest()) NET.clientFrame(now, dirOf(0), fireOf(0), altOf(0));
     } else if (!paused) {
       acc += dt;
       let n = 0;
       const local = NET.active ? 1 : game.nPlayers;
       while (acc >= STEP && n < 5) {
-        for (let i = 0; i < local; i++) { game.inputs[i].dir = dirOf(i); game.inputs[i].fire = fireOf(i); }
+        for (let i = 0; i < local; i++) { game.inputs[i].dir = dirOf(i); game.inputs[i].alt = altOf(i); game.inputs[i].fire = fireOf(i); }
         game.update();
         acc -= STEP;
         n++;

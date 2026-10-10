@@ -95,7 +95,7 @@
       case 'in':
         if (p && p.gamePid != null && O.inGame) {
           const inp = ui().game.inputs[p.gamePid];
-          if (inp) { inp.dir = clamp(d.d, -1, 3, -1); inp.fire = !!d.f; }
+          if (inp) { inp.dir = clamp(d.d, -1, 3, -1); inp.alt = clamp(d.a, -1, 3, -1); inp.fire = !!d.f; }
         }
         break;
       case 'falcon':
@@ -118,7 +118,7 @@
       // The tank of a player who left goes quiet for the rest of the battle
       const g = ui().game, pl = g.players[p.gamePid];
       if (pl) { pl.lives = 0; pl.respawn = 0; if (pl.tank) { pl.tank.dead = true; pl.tank = null; } }
-      if (g.inputs[p.gamePid]) { g.inputs[p.gamePid].dir = -1; g.inputs[p.gamePid].fire = false; }
+      if (g.inputs[p.gamePid]) { g.inputs[p.gamePid].dir = -1; g.inputs[p.gamePid].alt = -1; g.inputs[p.gamePid].fire = false; }
       O.names[p.gamePid] = p.name + ' (غادر)';
     }
     broadcastLobby();
@@ -304,13 +304,13 @@
   }
 
   // Called by the main loop on a guest's phone: glide between snapshots and send the controls
-  function clientFrame(now, dir, fire) {
+  function clientFrame(now, dir, fire, alt) {
     const g = ui().game;
     g.glide(Math.min(1, (now - O.snapAt) / O.gap));
-    const key = dir + ',' + (fire ? 1 : 0);
+    const key = dir + ',' + alt + ',' + (fire ? 1 : 0);
     if (key !== O.sentInput || now - O.sentAt > 250) {
       O.sentInput = key; O.sentAt = now;
-      send(O.conn, { t: 'in', d: dir, f: fire ? 1 : 0 });
+      send(O.conn, { t: 'in', d: dir, a: alt, f: fire ? 1 : 0 });
     }
   }
   function clientFalcon() { send(O.conn, { t: 'falcon' }); }

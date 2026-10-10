@@ -1,5 +1,5 @@
 // Guardians of the Oasis offline cache: serve from cache at once, refresh it from the network in the background
-const CACHE = 'waha-v3';
+const CACHE = 'waha-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'js/levels.js', 'js/sprites.js', 'js/icons.js', 'js/audio.js', 'js/game.js', 'js/net.js', 'js/online.js', 'js/ui.js', 'js/vendor/peerjs.min.js'];
 self.addEventListener('install', e => {
