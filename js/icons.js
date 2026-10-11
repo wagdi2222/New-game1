@@ -27,9 +27,13 @@
   const barrel = (x, y, w, h, p) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.2" fill="${p[2]}" ${O}/><rect x="${x - 1.5}" y="${y - 0.5}" width="${w + 3}" height="6" rx="2" fill="${p[1]}" ${O}/>`;
   const hullDefs = p => lin('hull', [[0, p[2]], [1, p[1]]]) + rad('tur', [[0, p[3]], [0.35, p[2]], [1, p[1]]], 0.35, 0.3, 0.8);
   const VEHICLE = {
-    A: p => treads(8, 12, 12, 46, p) + treads(44, 12, 12, 46, p) +
-      `<rect x="17" y="17" width="30" height="38" rx="6" fill="url(#hull)" ${O}/><rect x="26" y="48" width="12" height="3.5" rx="1.75" fill="${p[4]}"/>` +
-      barrel(28.5, 4, 7, 28, p) + `<circle cx="32" cy="35" r="11" fill="url(#tur)" ${O}/><circle cx="28.5" cy="31.5" r="2.6" fill="${p[3]}" opacity=".75"/>`,
+    // the guardians' armoured car: an eight-sided hull on three wheels a side, with a dome turret
+    A: p => [12, 28, 44].map(y => `<rect x="2.5" y="${y}" width="9" height="12" rx="3" fill="#1C1712" ${O}/><path d="M4.5 ${y + 4}H9.5M4.5 ${y + 8}H9.5" stroke="${p[1]}" stroke-width="1.8"/>` +
+      `<rect x="52.5" y="${y}" width="9" height="12" rx="3" fill="#1C1712" ${O}/><path d="M54.5 ${y + 4}H59.5M54.5 ${y + 8}H59.5" stroke="${p[1]}" stroke-width="1.8"/>`).join('') +
+      `<path d="M20 7H44L54 17V51L44 61H20L10 51V17Z" fill="url(#hull)" ${O}/><path d="M13 18L21 10H43" stroke="${p[3]}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".7"/>` +
+      `<rect x="16" y="49" width="32" height="3.6" rx="1.8" fill="${p[4]}"/><path d="M24 55.5V58M30 55.5V58M36 55.5V58M42 55.5V58" stroke="${p[0]}" stroke-width="2.2" stroke-linecap="round"/>` +
+      `<rect x="29" y="2" width="6" height="30" rx="2" fill="${p[2]}" ${O}/><rect x="27.5" y="1.5" width="9" height="5.5" rx="2" fill="${p[1]}" ${O}/>` +
+      `<circle cx="32" cy="36" r="12.5" fill="url(#tur)" ${O}/><circle cx="27.5" cy="31.5" r="3" fill="${p[3]}" opacity=".85"/>`,
     jeep: p => wheel(11, 11, 9, 14, p) + wheel(44, 11, 9, 14, p) + wheel(11, 40, 9, 14, p) + wheel(44, 40, 9, 14, p) +
       `<rect x="18" y="8" width="28" height="50" rx="9" fill="url(#hull)" ${O}/><rect x="21" y="11" width="22" height="11" rx="5" fill="${p[2]}"/>` +
       `<rect x="20.5" y="24" width="23" height="5" rx="2" fill="#9CC7DB" ${O}/><rect x="18" y="38" width="28" height="4" fill="${p[4]}"/>` +
@@ -118,12 +122,13 @@
       `<path d="M27.5 50L25.5 60Q32 63 38.5 60L36.5 50Z" fill="#7A5634"/>` +
       `<path d="M32 18Q41 22 38.5 41Q36.5 50 32 54Q27.5 50 25.5 41Q23 22 32 18Z" fill="#8E6640"/>` +
       `<path d="M32 25Q37 29 35.6 41Q34.4 47 32 50Q29.6 47 28.4 41Q27 29 32 25Z" fill="#EADBBF"/>` +
-      `<circle cx="32" cy="16" r="7.5" fill="#6B4A2E"/></g>` +
+      `<path d="M26.5 18Q25.5 9.5 31.5 8.2Q37.5 7.8 39.5 12.5L41 14.5Q39 17 37.6 17.2Q36.5 22 32 22.8Q27.5 22.5 26.5 18Z" fill="#3E2A1A"/></g>` +
       `<path d="M28 59.5L36 59.5M27 55.5H37" stroke="#4F3520" stroke-width="1.6"/>` +
       `<path d="M30 35.5h.1M34 35.5h.1M32 40h.1M30.5 44h.1M33.5 44h.1" stroke="#8E6640" stroke-width="2.4" stroke-linecap="round"/>` +
-      `<path d="M27 18Q32 22.5 37 18Q36 22.5 32 23.5Q28 22.5 27 18Z" fill="#EADBBF"/>` +
-      `<circle cx="29" cy="15" r="2.1" fill="#F2B134"/><circle cx="35" cy="15" r="2.1" fill="#F2B134"/><circle cx="29.3" cy="15" r="1" fill="${INK}"/><circle cx="34.7" cy="15" r="1" fill="${INK}"/>` +
-      `<path d="M30.3 18.5Q32 25 33.7 18.5Z" fill="#F2B134" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>` +
+      `<path d="M28.2 15.5Q29 20.5 33.5 21.6Q29.5 22.6 27.6 19.5Z" fill="#EADBBF"/>` +
+      `<path d="M34.6 15.6Q34 18.6 35.4 21" stroke="#1A1208" stroke-width="2.3" fill="none" stroke-linecap="round"/>` +
+      `<circle cx="34.6" cy="12.8" r="2" fill="${INK}" stroke="#F2B134" stroke-width="1.2"/><circle cx="34.1" cy="12.3" r=".6" fill="#FFFFFF"/>` +
+      `<path d="M38.6 11.8Q42.6 12.6 44 15.4Q43.6 17.6 41.8 18.4Q42.2 16.4 40.6 15.6L38.4 15.8Z" fill="#F2B134" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round"/>` +
       `<path d="M8 22Q18 21 27 29M56 22Q46 21 37 29" stroke="#C49A6C" stroke-width="1.8" fill="none" stroke-linecap="round"/>`,
       lin('wg', [[0, '#5A3D24'], [1, '#9C7248']]) + lin('wg2', [[0, '#9C7248'], [1, '#5A3D24']])),
 

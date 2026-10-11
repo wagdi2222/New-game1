@@ -240,33 +240,54 @@
     const wheel = (x, y, h) => { for (let j = 0; j < h; j++) { px(x, y + j, (y + j + frame) % 2 ? 1 : 2); px(x + 1, y + j, 1); } };
 
     switch (design) {
-      case 'A':
-        tread(1, 3, 2, 15, true); tread(12, 3, 2, 15, false);
-        hull(4, 4, 11, 13); turret(5, 6, 10, 11, true);
-        px(6, 7, 4); barrel(7, 0, 6); px(7, 12, 5); px(8, 12, 5);
+      // The guardians ride armoured cars of their own: an eight-sided hull on three wheels a side,
+      // a dome turret, and more guns with every cannon level
+      case 'A': case 'B': case 'C': case 'D': {
+        const lvl = 'ABCD'.indexOf(design);
+        for (const wy of [3, 7, 11]) {
+          for (const wx of [0, 14]) {
+            for (let j = 0; j < 3; j++) for (let i = 0; i < 2; i++) {
+              const outer = wx === 0 ? i === 0 : i === 1;
+              px(wx + i, wy + j, j === 1 ? ((frame + (outer ? 1 : 0)) % 2 ? 3 : 1) : '#1C1712');
+            }
+          }
+        }
+        const span = { 2: [4, 11], 3: [3, 12], 13: [3, 12], 14: [4, 11] };
+        for (let y = 2; y <= 14; y++) {
+          const [x0, x1] = span[y] || [2, 13];
+          for (let x = x0; x <= x1; x++) px(x, y, x === x1 || y === 14 || (y === 13 && x === x1 - 1) ? 1 : x === x0 || y === 2 || (y === 3 && x === x0 + 1) ? 3 : 2);
+        }
+        // a gold band and the engine grille at the back
+        for (let x = 4; x <= 11; x++) px(x, 12, 5);
+        for (const x of [5, 7, 9]) { px(x, 13, 1); px(x + 1, 13, 2); }
+        if (lvl >= 1) for (const y of [6, 10]) { px(1, y, 2); px(14, y, 1); }
+        if (lvl === 3) {
+          for (const [x, y] of [[2, 3], [3, 2], [13, 3], [12, 2]]) px(x, y, 5);
+          for (let x = 3; x <= 12; x++) px(x, 5, x === 3 ? 3 : 1);
+        }
+        // guns: one, one with a muzzle brake, then two, then two heavy ones; drawn under the dome
+        const gun = (x, top, brake) => {
+          for (let y = top; y <= 8; y++) { px(x, y, 3); px(x + 1, y, 1); }
+          if (brake) for (let i = -1; i <= 2; i++) { px(x + i, top, 1); px(x + i, top + 1, i === -1 ? 3 : i === 2 ? 1 : 2); }
+          else { px(x, top, 4); px(x + 1, top, 3); }
+        };
+        if (lvl <= 1) gun(7, 0, lvl === 1);
+        else if (lvl === 2) { gun(5, 1, false); gun(9, 1, false); }
+        else { gun(5, 0, true); gun(9, 0, true); }
+        // the dome, lit from the top left; the heaviest car wears a gold crown
+        const r = lvl >= 2 ? 3.7 : 3.2;
+        for (let y = 4; y <= 13; y++) {
+          for (let x = 3; x <= 12; x++) {
+            const dx = x + 0.5 - 8, dy = y + 0.5 - 9, d = Math.hypot(dx, dy);
+            if (d > r) continue;
+            let c = d > r - 0.85 ? (dx < 0 || dy < 0 ? 2 : 1) : dx > 0.6 && dy > 0.6 ? 2 : 3;
+            if (lvl === 3 && d > r - 0.85 && dy < 0.5) c = 5;
+            px(x, y, c);
+          }
+        }
+        px(6, 7, 4); px(7, 7, 4); px(6, 8, 4);
         break;
-      case 'B':
-        tread(2, 2, 2, 15, true); tread(12, 2, 2, 15, false);
-        hull(4, 5, 11, 14); rect(5, 3, 6, 2, 2);
-        for (let x = 5; x <= 10; x++) px(x, 3, 3);
-        turret(6, 7, 9, 11, true); px(6, 8, 4); barrel(7, 0, 7); px(7, 13, 5); px(8, 13, 5);
-        break;
-      case 'C':
-        tread(1, 3, 3, 15, true); tread(12, 3, 3, 15, false);
-        hull(4, 5, 11, 14); turret(4, 6, 11, 13, true);
-        px(5, 7, 4); px(6, 7, 4); px(5, 8, 4); barrel(7, 0, 6);
-        for (const y of [1, 2]) { px(6, y, 1); px(7, y, 3); px(8, y, 2); px(9, y, 1); }
-        px(9, 12, 5); px(10, 12, 5);
-        break;
-      case 'D':
-        tread(0, 4, 2, 15, true); tread(12, 4, 2, 15, false);
-        hull(4, 3, 11, 15);
-        for (let x = 5; x <= 10; x++) { px(x, 5, 1); px(x, 14, 1); }
-        turret(5, 6, 10, 12, false);
-        px(5, 6, 5); px(10, 6, 5); px(5, 12, 5); px(10, 12, 5); px(6, 7, 4); px(7, 7, 4);
-        for (let y = 0; y <= 6; y++) { px(6, y, 3); px(9, y, 2); }
-        px(6, 0, 1); px(9, 0, 1);
-        break;
+      }
       case 'jeep':
         wheel(3, 3, 4); wheel(11, 3, 4); wheel(3, 10, 4); wheel(11, 10, 4);
         rect(5, 2, 6, 13, 2);
