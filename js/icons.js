@@ -222,6 +222,15 @@
       `<path d="M22 46Q32 41 42 46" stroke="#8E6A12" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M23 50Q32 45.5 41 50" stroke="#8E6A12" stroke-width="1.2" fill="none" stroke-dasharray="1.5 2.5" stroke-linecap="round"/>` +
       `<path d="M23 38Q20 44 21 51" stroke="#FFF2B8" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
       lin('bz', [[0, '#FBE59A'], [0.45, '#E2B848'], [1, '#9C7A20']])),
+
+    najda: () => {
+      let star = '';
+      for (let i = 0; i < 16; i++) { const a = -Math.PI / 2 + i * Math.PI / 8, r = i % 2 ? 4.2 : 8; star += (i ? 'L' : 'M') + (35 + Math.cos(a) * r).toFixed(1) + ' ' + (23 + Math.sin(a) * r).toFixed(1); }
+      return svg(`<rect x="11" y="6" width="5" height="54" rx="2.5" fill="url(#pole)" ${O}/><circle cx="13.5" cy="6" r="4" fill="#FFE08A" ${O}/>` +
+        `<path d="M16 10Q30 6 40 10T58 10V36Q48 32 40 36T16 36Z" fill="url(#flag)" ${O}/><path d="${star}Z" fill="#FFFFFF" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>` +
+        `<path d="M19 14Q30 10 39 13" stroke="#8EE0A8" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+      lin('pole', [[0, '#F7D774'], [1, '#9C7A20']]) + lin('flag', [[0, '#3FB36A'], [1, '#14603A']], 0, 1));
+    },
   };
   ICONS.qirba = ICONS.skin;
 

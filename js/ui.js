@@ -64,7 +64,7 @@
     pu: {}, region: {},
   };
   ICON.p1 = ICON.players[0]; ICON.p2 = ICON.players[1];
-  for (const k of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba']) ICON.pu[k] = V(k);
+  for (const k of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba', 'najda']) ICON.pu[k] = V(k);
   for (const r of ['desert', 'oasis', 'mountains', 'coast', 'oldcity']) ICON.region[r] = V('region:' + r);
   const MISSION_ICON = { defend: ICON.well, collect: ICON.skin, towers: ICON.tower, escort: ICON.camel, survive: ICON.lantern, boss: ICON.boss };
   const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss };
@@ -82,10 +82,11 @@
     dates: ['التمر', 'حياة إضافية وصحة كاملة'],
     coffee: ['دلّة القهوة', 'سرعة مضاعفة وإطلاق أسرع لعشر ثوانٍ'],
     qirba: ['قِربة الماء', 'ترمّم البئر، أو تروي الجمال، أو تشفي دباباتك'],
+    najda: ['راية النجدة', 'تظهر حين يخرج رفيق من المعركة، وتعيده إليها'],
   };
   const TOAST = {
     shield: 'الدرع الدمشقي: أنت محمي!', whirl: 'زوبعة! العقارب تائهون', mason: 'البنّاء: سور حجري للبئر', hammer: 'مطرقة الحدّاد: مدفع أقوى',
-    falcon: 'انطلق الصقر!', dates: 'تمر: حياة إضافية', coffee: 'دلّة القهوة: سرعة!', qirba: 'قِربة ماء: ترميم وشفاء',
+    falcon: 'انطلق الصقر!', dates: 'تمر: حياة إضافية', coffee: 'دلّة القهوة: سرعة!', qirba: 'قِربة ماء: ترميم وشفاء', najda: 'راية النجدة: عاد الرفاق إلى المعركة!',
   };
 
   // ---------- screens ----------
@@ -751,7 +752,11 @@
       if (name === 'gameover') setTimeout(() => showOver(data), 250); else setTimeout(() => showResult(data), 150);
     } else if (name === 'powerup') { powerupToast(data); if (tut) tut.picked = true; }
     else if (name === 'toast') toast(data);
-    else if (name === 'falcons') {
+    else if (name === 'rescued') {
+      const text = nameOf(data.from) + ' أعطى ' + nameOf(data.to) + ' عربة!';
+      toast(text);
+      if (hosting()) NET.capture('toast', text);
+    } else if (name === 'falcons') {
       if (data.pid === myPid) { save.falcons = data.n; persist(); }
       else if (hosting()) NET.capture('falcons', data);
     }
@@ -939,10 +944,50 @@
       for (let k = 0; k < 3; k++) lvl.append(el('i'));
       c.append(img(V('vehicle:A:' + game.paletteOf(i))));
       if (names) c.append(el('span', 'nm', i === myPid ? 'أنت' : names[i] || ''));
-      c.append(lives, hp, lvl);
+      const give = el('span', 'give', '+ عربة');
+      give.hidden = true;
+      c.append(lives, hp, lvl, give);
+      c.onclick = () => rescue(i);
       box.append(c);
-      return { c, lives, hp, lvl };
+      return { c, lives, hp, lvl, give };
     });
+  }
+  // ---------- helping teammates: giving a car, quick chat ----------
+  const nameOf = pid => (names && names[pid]) || (pid === myPid && settings.name) || 'اللاعب ' + fmt(pid + 1);
+  // Who would give a car to this knocked-out player: me online, the other player on a shared phone
+  function giverFor(pid) {
+    const pl = game.players[pid];
+    if (!pl || game.duel || game.state !== 'play' || pl.lives > 0 || pl.away || game.nPlayers < 2) return -1;
+    const from = localDuo() ? 1 - pid : myPid;
+    const g = game.players[from];
+    return from !== pid && g && g.lives >= 2 && !g.away ? from : -1;
+  }
+  function rescue(pid) {
+    const from = giverFor(pid);
+    if (from < 0) return;
+    if (guest()) NET.give(pid); else game.giveLife(from, pid);
+  }
+  const CHAT = ['احمِ البئر!', 'أنا قادم!', 'ساعدني!', 'أحسنت!', 'هجوم!', 'اتبعني', 'انتبه للمدفعية!', 'شكراً'];
+  let chats = [], chatAt = 0;
+  CHAT.forEach((text, i) => {
+    const b = el('button', null, text);
+    b.onclick = e => {
+      e.stopPropagation();
+      $('chatbox').hidden = true;
+      if (performance.now() - chatAt < 1200) return;
+      chatAt = performance.now();
+      NET.chat(i);
+    };
+    $('chatbox').append(b);
+  });
+  $('b-chat').onclick = () => { $('chatbox').hidden = !$('chatbox').hidden; };
+  function showChat(pid, i) {
+    const text = CHAT[i];
+    if (!text || !game.players[pid]) return;
+    chats = chats.filter(c => c.pid !== pid);
+    chats.push({ pid, text, until: performance.now() + 2600 });
+    TB.audio.play('appear');
+    if (!game.players[pid].tank) toast(nameOf(pid) + ': ' + text);
   }
   function updateHud() {
     const set = (key, value, fn) => { if (hud[key] !== value) { hud[key] = value; fn(value); } };
@@ -959,7 +1004,10 @@
         pips(chip.hp, t ? Math.max(0, t.hp) : 0, max);
         [...chip.lvl.children].forEach((s, j) => s.classList.toggle('on', j < pl.level));
         chip.c.classList.toggle('gone', pl.lives <= 0 && !t);
+        chip.c.classList.toggle('away', !!pl.away);
       });
+      const canHelp = giverFor(i) >= 0;
+      if (chip.give.hidden === canHelp) { chip.give.hidden = !canHelp; chip.c.classList.toggle('rescue', canHelp); }
     });
     set('score', game.score, v => { $('h-score').textContent = fmt(v); });
     const obj = game.objective();
@@ -1059,6 +1107,22 @@
         cvx.strokeText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
         cvx.fillText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
       });
+    }
+    if (chats.length) {
+      const now = performance.now();
+      chats = chats.filter(c => c.until > now);
+      cvx.font = '800 ' + Math.round(6 * s) + 'px ' + getComputedStyle(document.body).fontFamily;
+      cvx.textAlign = 'center';
+      for (const c of chats) {
+        const t = game.players[c.pid] && game.players[c.pid].tank;
+        if (!t) continue;
+        const w = cvx.measureText(c.text).width + 6 * s, h = 10 * s, x = (8 + t.x + 8) * s, y = (8 + t.y - (names ? 15 : 7)) * s;
+        cvx.fillStyle = 'rgba(255,250,235,0.95)';
+        cvx.strokeStyle = PLAYER_COLORS[c.pid] || '#F2B134'; cvx.lineWidth = Math.max(1.5, s * 0.8);
+        cvx.beginPath(); cvx.roundRect(x - w / 2, y - h, w, h, 3 * s); cvx.fill(); cvx.stroke();
+        cvx.fillStyle = '#2A1800';
+        cvx.fillText(c.text, x, y - 2.8 * s);
+      }
     }
     if (tut && tut.marker) {
       const m = tut.marker, r = (9 + Math.sin(performance.now() / 160) * 1.5) * s;
@@ -1205,6 +1269,8 @@
   function configureControls() {
     const duo = localDuo(), tilted = tiltMode();
     $('play').classList.toggle('duo', duo);
+    $('b-chat').hidden = !NET.active;
+    $('chatbox').hidden = true;
     padStyle();
     padL.hidden = tilted;
     tiltView.hidden = !tilted;
@@ -1630,6 +1696,7 @@
     saveSettings: () => store.set('settings', settings),
     customMap: () => edMap.slice(),
     pickOnline: () => { onlinePick = true; buildJourney(); show('journey'); },
+    showChat, chats: () => chats.slice(),
   };
   NET.init();
   // An invitation link (?room=CODE) opens the room straight away

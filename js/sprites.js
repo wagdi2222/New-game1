@@ -594,6 +594,15 @@
       px(7, 1, '#F2CF5A');
       for (const [x, y] of [[3, 10], [2, 9], [1, 8], [1, 7], [0, 6], [4, 11]]) px(x, y, '#D4A938');
       for (const [x, y] of [[12, 7], [13, 8], [13, 9], [13, 10], [12, 11]]) px(x, y, '#9C7A20');
+    } else if (type === 'najda') {
+      // the rescue banner: a green flag with a white star on a gold pole
+      for (let y = 1; y <= 15; y++) { px(3, y, '#E2B848'); px(4, y, '#9C7A20'); }
+      px(3, 0, '#FFF2B8'); px(4, 0, '#E2B848');
+      for (let y = 2; y <= 9; y++) {
+        const end = 13 - (y === 2 || y === 9 ? 1 : 0) + (y > 3 && y < 8 ? (y % 2) : 0);
+        for (let x = 5; x <= end; x++) px(x, y, y <= 3 ? '#3FB36A' : y >= 8 ? '#14603A' : '#1F8A55');
+      }
+      for (const [x, y] of [[9, 3], [9, 4], [9, 6], [9, 7], [7, 5], [8, 5], [10, 5], [11, 5], [8, 4], [10, 4], [8, 6], [10, 6], [9, 5]]) px(x, y, '#FFFFFF');
     } else if (type === 'qirba') {
       g = fromStrings(SKIN, { b: '#8B5A2B', l: '#B07A45', d: '#5E3A1A', y: '#E0B040', k: '#3A2A1A', w: '#4FC3F7' });
     }
@@ -742,7 +751,7 @@
         frame: frameTile(),
         powerups: {},
       };
-      for (const p of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba']) fx.powerups[p] = powerupCanvas(p);
+      for (const p of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba', 'najda']) fx.powerups[p] = powerupCanvas(p);
     }
     return fx;
   }

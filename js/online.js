@@ -15,6 +15,11 @@
     events: [], lastSent: -99, snapAt: 0, gap: 50, sentInput: '', sentAt: 0, lastHp: null, hostPaused: false,
   };
   const ui = () => TB.ui;
+  const TOKEN = (() => {
+    const make = () => Math.random().toString(36).slice(2, 12);
+    try { let t = localStorage.getItem('waha.tok'); if (!t) { t = make(); localStorage.setItem('waha.tok', t); } return t; } catch (e) { return make(); }
+  })();
+  const hello = u => ({ t: 'hello', v: VERSION, name: u.settings.name || cleanName(''), upg: u.save.upg, falcons: u.save.falcons, rank: TB.progress.rankOf(u.save.xp || 0).index, skin: u.save.skin || '', tok: TOKEN });
   const send = (conn, msg) => { try { if (conn && conn.open) conn.send(msg); } catch (e) { /* closed */ } };
   const clamp = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
   const cleanName = n => String(n || '').replace(/[<>\n\r\t]/g, '').trim().slice(0, 12) || 'حارس';
@@ -31,8 +36,12 @@
   function open(code) {
     const u = ui();
     $('on-name').value = u.settings.name || '';
-    $('on-code').value = code || '';
+    // After an accidental close, the last room comes back for a couple of hours
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem('waha.room') || 'null'); } catch (e) { last = null; }
     $('on-join-hint').hidden = !code;
+    if (!code && last && Date.now() - last.at < 2 * 3600 * 1000) code = last.code;
+    $('on-code').value = code || '';
     if (O.active) { renderRoom(); view('room'); } else view('start');
     u.show('online');
     if (code && u.settings.name) setTimeout(() => $('on-join').focus(), 50);
@@ -62,7 +71,7 @@
   }
 
   function lobbyList() {
-    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null, rank: p.rank || 0, skin: p.skin || '' }));
+    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null, rank: p.rank || 0, skin: p.skin || '', away: !!p.away }));
   }
   function broadcast(msg, onlyPlaying) {
     for (const p of O.players) if (p.conn && (!onlyPlaying || p.gamePid != null)) send(p.conn, msg);
@@ -80,11 +89,14 @@
       case 'hello': {
         if (p) return;
         if (d.v !== VERSION) { send(conn, { t: 'old' }); return; }
+        const tok = typeof d.tok === 'string' ? d.tok.slice(0, 24) : '';
+        const back = tok && O.players.find((x, i) => i > 0 && x.tok === tok);
+        if (back) { rejoin(back, conn); return; }
         if (O.players.length >= MAX) { send(conn, { t: 'full' }); return; }
         const upg = d.upg || {};
         O.players.push({
           name: cleanName(d.name), conn, ping: 0, seen: performance.now(), gamePid: null, falcons: clamp(d.falcons, 0, 3, 0), rank: clamp(d.rank, 0, 13, 0),
-          skin: TB.sprites.SKINS[d.skin] ? d.skin : '',
+          skin: TB.sprites.SKINS[d.skin] ? d.skin : '', tok,
           upg: { armor: clamp(upg.armor, 0, 3, 0), cannon: clamp(upg.cannon, 0, 2, 0), engine: clamp(upg.engine, 0, 3, 0) },
         });
         send(conn, { t: 'welcome', code: O.code });
@@ -102,33 +114,75 @@
       case 'falcon':
         if (p && p.gamePid != null && O.inGame && !O.hostPaused) ui().game.useFalcon(p.gamePid);
         break;
+      case 'chat': {
+        const now = performance.now();
+        if (p && p.gamePid != null && O.inGame && now - (p.chatAt || 0) > 1000) { p.chatAt = now; relayChat(p.gamePid, clamp(d.i, 0, 7, 0)); }
+        break;
+      }
+      case 'give':
+        if (p && p.gamePid != null && O.inGame) ui().game.giveLife(p.gamePid, clamp(d.to, 0, 3, 0));
+        break;
       case 'pong':
         if (p && typeof d.c === 'number') p.ping = Math.max(0, Math.round(performance.now() - d.c));
         break;
       case 'bye':
+        if (p) p.leaving = true;
         hostClose(conn);
         break;
+    }
+  }
+
+  function relayChat(pid, i) {
+    broadcast({ t: 'chat', pid, i }, true);
+    ui().showChat(pid, i);
+  }
+
+  // A player whose connection dropped comes back to their seat (and their battle)
+  function rejoin(p, conn) {
+    const old = p.conn, u = ui();
+    p.conn = conn; p.seen = performance.now(); p.away = false;
+    if (old && old !== conn) { try { old.close(); } catch (e) { /* gone */ } }
+    send(conn, { t: 'welcome', code: O.code });
+    broadcastLobby();
+    if (O.inGame && p.gamePid != null && O.pending) {
+      u.game.setAway(p.gamePid, false);
+      sendStart(p, true);
+      u.gtoast(u.ICON.players[p.gamePid] || u.ICON.p2, 'عاد ' + p.name, 'رجع إلى المعركة');
     }
   }
 
   function hostClose(conn) {
     const i = O.players.findIndex(x => x.conn === conn);
     if (i <= 0) return;
-    const [p] = O.players.splice(i, 1);
+    const p = O.players[i], u = ui();
     if (O.inGame && p.gamePid != null) {
-      // The tank of a player who left goes quiet for the rest of the battle
-      const g = ui().game, pl = g.players[p.gamePid];
-      if (pl) { pl.lives = 0; pl.respawn = 0; if (pl.tank) { pl.tank.dead = true; pl.tank = null; } }
-      if (g.inputs[p.gamePid]) { g.inputs[p.gamePid].dir = -1; g.inputs[p.gamePid].alt = -1; g.inputs[p.gamePid].fire = false; }
+      // Their car leaves the field; the seat waits for them unless they chose to leave
+      p.conn = null;
+      u.game.setAway(p.gamePid, true);
+      if (!p.leaving) {
+        p.away = true;
+        broadcastLobby();
+        u.gtoast(u.ICON.foe, 'انقطع اتصال ' + p.name, 'ننتظر عودته إلى المعركة');
+        return;
+      }
       O.names[p.gamePid] = p.name + ' (غادر)';
     }
+    O.players.splice(i, 1);
     broadcastLobby();
-    ui().gtoast(ui().ICON.foe, 'غادر ' + p.name, 'الغرفة فيها الآن ' + ui().fmt(O.players.length));
+    u.gtoast(u.ICON.foe, 'غادر ' + p.name, 'الغرفة فيها الآن ' + u.fmt(O.players.length));
+  }
+  // Seats still waiting when a new battle starts or the room reopens are given up
+  function dropAway() {
+    if (!O.players.some(p => p.away)) return;
+    O.players = O.players.filter(p => !p.away);
+    broadcastLobby();
   }
 
   // Start a battle for everyone in the room
   function hostStart(pending) {
     const u = ui();
+    dropAway();
+    O.pending = pending;
     O.players.forEach((p, i) => { p.gamePid = i; });
     O.names = O.players.map(p => p.name);
     O.inGame = true; O.hostPaused = false; O.events = []; O.lastSent = -99;
@@ -139,11 +193,18 @@
       players: O.players.length, playerUpgrades: O.players.map(p => p.upg), falcons: O.players.map(p => p.falcons),
       names: O.names, myPid: 0, skins: O.players.map(p => p.skin || ''),
     };
+    O.extra = extra;
     u.startStage(pending, extra);
-    const stage = JSON.parse(JSON.stringify(pending.stage));
-    O.players.forEach((p, i) => {
-      if (p.conn) send(p.conn, { t: 'start', stage, mode: pending.mode, difficulty: u.settings.difficulty, me: i, n: extra.players, ups: extra.playerUpgrades, fal: extra.falcons, names: O.names, skins: extra.skins });
-    });
+    O.players.forEach(p => { if (p.conn) sendStart(p, false); });
+  }
+  // The battle for one guest; coming back mid-battle also brings the field as it is now
+  function sendStart(p, resume) {
+    const u = ui(), extra = O.extra, msg = {
+      t: 'start', stage: JSON.parse(JSON.stringify(O.pending.stage)), mode: O.pending.mode, difficulty: u.settings.difficulty, me: p.gamePid,
+      n: extra.players, ups: extra.playerUpgrades, fal: extra.falcons, names: O.names, skins: extra.skins,
+    };
+    if (resume) msg.map = Array.from(u.game.map);
+    send(p.conn, msg);
   }
 
   // Called by the main loop after the host's simulation ran
@@ -193,6 +254,7 @@
 
   function toLobby() {
     O.inGame = false;
+    dropAway();
     for (const p of O.players) p.gamePid = null;
     broadcast({ t: 'room' });
     broadcastLobby();
@@ -209,7 +271,8 @@
       const conn = await TB.net.join(code, { onOpen: () => {}, onData: clientData, onClose: clientClose });
       if (my !== O.attempt) { TB.net.close(); return; }
       Object.assign(O, { active: true, role: 'client', code, conn, me: 0, inGame: false, hostPaused: false, players: [], welcomed: false, heard: performance.now() });
-      send(conn, { t: 'hello', v: VERSION, name, upg: u.save.upg, falcons: u.save.falcons, rank: TB.progress.rankOf(u.save.xp || 0).index, skin: u.save.skin || '' });
+      try { localStorage.setItem('waha.room', JSON.stringify({ code, at: Date.now() })); } catch (e) { /* storage blocked */ }
+      send(conn, hello(u));
       O.welcomeTimer = setTimeout(() => { if (!O.welcomed && my === O.attempt) { leave(true); fail('المضيف لم يرد. اطلب منه أن يفتح اللعبة ثم حاول مجدداً.'); } }, 20000);
     } catch (e) {
       if (my !== O.attempt) return;
@@ -245,8 +308,13 @@
           remote: true, players: clamp(d.n, 1, 4, 1), playerUpgrades: d.ups, falcons: d.fal, names: O.names, myPid: O.me, difficulty: d.difficulty,
           skins: (Array.isArray(d.skins) ? d.skins : []).map(k => (TB.sprites.SKINS[k] ? k : '')),
         });
+        const g = u.game;
+        if (Array.isArray(d.map) && d.map.length === g.map.length) { g.map.set(d.map.map(v => clamp(v, 0, 6, 0))); g.redrawTerrain(); }
         break;
       }
+      case 'chat':
+        if (O.inGame) u.showChat(clamp(d.pid, 0, 3, 0), clamp(d.i, 0, 7, 0));
+        break;
       case 'snap': {
         if (!O.inGame || u.screen() !== 'play' || !d.s) return;
         const g = u.game, now = performance.now();
@@ -299,12 +367,41 @@
   }
 
   function clientClose() {
-    if (O.role !== 'client' || !O.active) return;
+    if (O.role !== 'client' || !O.active || O.reconnecting) return;
+    if (O.inGame) { reconnect(); return; }
     const u = ui();
     leave(true);
     u.goMenu();
     u.gtoast(u.ICON.foe, 'انقطع الاتصال بالمضيف', 'تأكد من الإنترنت وادخل الغرفة من جديد');
   }
+
+  // Lost the host mid-battle: keep trying for a minute to get back to the same seat
+  async function reconnect() {
+    const u = ui(), my = O.attempt, until = performance.now() + 60000;
+    O.reconnecting = true;
+    while (O.active && my === O.attempt && performance.now() < until) {
+      try {
+        const conn = await TB.net.join(O.code, { onOpen: () => {}, onData: clientData, onClose: clientClose });
+        if (!O.active || my !== O.attempt) return;
+        O.conn = conn; O.welcomed = false; O.heard = performance.now();
+        send(conn, hello(u));
+        for (let i = 0; i < 40 && !O.welcomed; i++) await new Promise(r => setTimeout(r, 200));
+        if (O.welcomed) { O.reconnecting = false; return; }
+      } catch (e) { /* the host can't be reached yet */ }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    if (!O.active || my !== O.attempt) return;
+    O.reconnecting = false;
+    leave(true);
+    u.goMenu();
+    u.gtoast(u.ICON.foe, 'انقطع الاتصال بالمضيف', 'تأكد من الإنترنت وادخل الغرفة من جديد');
+  }
+
+  function chat(i) {
+    if (O.role === 'host') relayChat(0, i);
+    else send(O.conn, { t: 'chat', i });
+  }
+  const give = to => send(O.conn, { t: 'give', to });
 
   // Called by the main loop on a guest's phone: glide between snapshots and send the controls
   function clientFrame(now, dir, fire, alt) {
@@ -325,6 +422,7 @@
     if (O.role === 'host') {
       broadcast({ t: 'ping', c: now });
       for (const p of O.players.slice(1)) {
+        if (p.away) continue;
         if (now - (p.seen || 0) > (O.inGame && p.gamePid != null ? QUIET_BATTLE : QUIET_LOBBY)) {
           const conn = p.conn;
           hostClose(conn);
@@ -332,9 +430,13 @@
         }
       }
       if (u.screen() === 'online') renderRoom();
+    } else if (O.reconnecting) {
+      $('netwarn-text').textContent = 'انقطع الاتصال… نحاول العودة إلى المعركة';
+      $('netwarn').hidden = u.screen() !== 'play';
     } else if (O.welcomed) {
       const quiet = now - O.heard;
       if (quiet > (O.hostPaused ? QUIET_HOST_PAUSED : QUIET_HOST)) { clientClose(); return; }
+      $('netwarn-text').textContent = 'الاتصال بالمضيف ضعيف…';
       $('netwarn').hidden = !(O.inGame && !O.hostPaused && quiet > WEAK && u.screen() === 'play');
     }
   }
@@ -347,7 +449,7 @@
     else if (O.conn) send(O.conn, { t: 'bye' });
     clearTimeout(O.welcomeTimer);
     setTimeout(() => TB.net.close(), O.role === 'host' ? 300 : 0);
-    Object.assign(O, { active: false, role: null, conn: null, players: [], inGame: false, code: '', welcomed: false, hostPaused: false });
+    Object.assign(O, { active: false, role: null, conn: null, players: [], inGame: false, code: '', welcomed: false, hostPaused: false, reconnecting: false, pending: null });
     if (!silent) ui().goMenu();
   }
 
@@ -371,7 +473,7 @@
       b.textContent = p ? p.name + ((host && i === 0) || (!host && i === O.slot) ? ' (أنت)' : '') : 'بانتظار لاعب…';
       const small = document.createElement('small');
       const rank = p ? TB.progress.RANKS[clamp(p.rank, 0, 13, 0)][1] + ' · ' : '';
-      small.textContent = !p ? 'ادعُ صديقاً بالرابط' : rank + (p.host ? 'المضيف' : p.ping ? 'الاتصال ' + u.fmt(p.ping) + ' م.ث' : 'متصل');
+      small.textContent = !p ? 'ادعُ صديقاً بالرابط' : rank + (p.host ? 'المضيف' : p.away ? 'انقطع، ننتظر عودته' : p.ping ? 'الاتصال ' + u.fmt(p.ping) + ' م.ث' : 'متصل');
       text.append(b, small);
       slot.append(icon, text);
       box.append(slot);
@@ -412,5 +514,5 @@
     setInterval(heartbeat, 1000);
   }
 
-  Object.assign(O, { init, open, hostStart, hostFrame, hostEnd, capture, setPause, toLobby, clientFrame, clientFalcon, leave, renderRoom });
+  Object.assign(O, { init, open, hostStart, hostFrame, hostEnd, capture, setPause, toLobby, clientFrame, clientFalcon, leave, renderRoom, chat, give });
 })();

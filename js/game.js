@@ -34,7 +34,7 @@
     normal: { lives: 3, eSpeed: 1, eFire: 1, eBullet: 1, maxOn: 4, spawnMul: 1, shield: 180, chase: 1, wellHp: 4, skinAllow: 2, camels: 2, bossMul: 1, timeMul: 1 },
     hard: { lives: 3, eSpeed: 1.12, eFire: 1.45, eBullet: 1.1, maxOn: 5, spawnMul: 0.8, shield: 150, chase: 1.3, wellHp: 3, skinAllow: 1, camels: 2, bossMul: 1.3, timeMul: 1.15 },
   };
-  const POWERUPS = ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba'];
+  const POWERUPS = ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba', 'najda'];
 
   // 8px ring of mud around the well
   const FORTRESS = [];
@@ -804,7 +804,7 @@
       pl.lives--;
       this.stats.deaths++;
       if (pl.lives > 0) pl.respawn = 50;
-      else if (this.players.every(q => q.lives <= 0)) this.lose('lives');
+      else if (this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
     }
 
     damageWell(n) {
@@ -921,8 +921,9 @@
 
     // ---------- power-ups ----------
     spawnPowerup(nx, ny) {
-      const pool = POWERUPS.filter(p => (p !== 'mason' || this.well) && (p !== 'falcon' || this.tanks.some(t => t.team === 'e')));
-      const type = pool[Math.floor(Math.random() * pool.length)];
+      const out = this.players.some(q => q.lives <= 0 && !q.away);
+      const pool = POWERUPS.filter(p => (p !== 'mason' || this.well) && (p !== 'falcon' || this.tanks.some(t => t.team === 'e')) && p !== 'najda');
+      const type = out && Math.random() < 0.7 ? 'najda' : pool[Math.floor(Math.random() * pool.length)];
       for (let i = 0; i < 60; i++) {
         const x = i === 0 && nx != null ? nx : Math.floor(Math.random() * 25) * 8, y = i === 0 && ny != null ? ny : Math.floor(Math.random() * 25) * 8;
         if (this.well && hit(x, y, 16, 16, 80, 176, 48, 32)) continue;
@@ -967,6 +968,10 @@
           else for (const q of this.players) if (q.tank) q.tank.hp = q.tank.max;
           this.sound('water');
           break;
+        case 'najda':
+          for (const q of this.players) if (q.lives <= 0 && !q.away) { q.lives = 1; q.respawn = 30; }
+          this.sound('life');
+          break;
       }
     }
 
@@ -979,6 +984,31 @@
       this.stats.falconUses++;
       this.sound('falcon');
       return true;
+    }
+
+    // A player with cars to spare gives one to a teammate who is out of the battle
+    giveLife(from, to) {
+      const a = this.players[from], b = this.players[to];
+      if (this.state !== 'play' || !a || !b || a === b || a.lives < 2 || b.lives > 0 || b.away) return false;
+      a.lives--;
+      b.lives = 1;
+      b.respawn = 30;
+      this.sound('life');
+      this.emit('rescued', { from, to });
+      return true;
+    }
+
+    // An online player whose connection dropped: their seat waits for them until the battle ends
+    setAway(pid, away) {
+      const pl = this.players[pid];
+      if (!pl) return;
+      pl.away = away;
+      if (away) {
+        if (pl.tank) { pl.tank.dead = true; pl.tank = null; }
+        pl.respawn = 0;
+        this.inputs[pid].dir = -1; this.inputs[pid].alt = -1; this.inputs[pid].fire = false;
+        if (this.state === 'play' && this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
+      } else if (pl.lives > 0 && !pl.tank) pl.respawn = 30;
     }
 
     falconsOf(pid) { return this.sharedFalcons ? this.falcons : (this.players[pid] || {}).falcons || 0; }
@@ -1042,7 +1072,7 @@
         this.toast('أهل الواحة رمّموا البئر');
         this.sound('water');
       }
-      for (const pl of this.players) if (pl.respawn > 0 && --pl.respawn === 0 && this.state === 'play') this.spawnPlayer(pl);
+      for (const pl of this.players) if (pl.respawn > 0 && --pl.respawn === 0 && this.state === 'play' && !pl.away) this.spawnPlayer(pl);
       if (this.state === 'play') this.enemySpawner();
       this.updateSpawns();
       for (const pl of this.players) this.updatePlayer(pl);
@@ -1136,7 +1166,7 @@
       const q = v => Math.round(v * 4) / 4;
       return {
         t: this.t, st: this.state, sc: this.score, wf: this.waterFrame, wh: this.whirl, ms: this.mason, ob: this.objective(),
-        pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid)]),
+        pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid), p.away ? 1 : 0]),
         tk: this.tanks.map(t => [t.id, t.team === 'p' ? 1 : 0, t.kind, t.pid == null ? -1 : t.pid, q(t.x), q(t.y), t.dir, t.hp, t.max,
           t.anim & 255, t.shield > 0 ? 1 : 0, t.flash, t.bonus ? 1 : 0, t.stun, t.sink, t.moving ? 1 : 0]),
         bu: this.bullets.map(b => [b.id, q(b.x), q(b.y), b.dir, b.team === 'p' ? 1 : 0, b.age]),
@@ -1170,7 +1200,7 @@
       s.pl.forEach((a, i) => {
         const p = this.players[i];
         if (!p) return;
-        p.lives = a[0]; p.level = a[1]; p.coffee = a[2]; p.falcons = a[3]; p.tank = null;
+        p.lives = a[0]; p.level = a[1]; p.coffee = a[2]; p.falcons = a[3]; p.away = !!a[4]; p.tank = null;
       });
       const before = id => prev && prev.get(id);
       const moved = (o, x, y, id) => {
