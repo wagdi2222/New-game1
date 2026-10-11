@@ -25,6 +25,8 @@
     survive: { name: 'اصمد حتى الفجر', well: true },
     boss: { name: 'القلعة المتحركة', well: true },
     tutorial: { name: 'الدرس الأول', well: true },
+    duel: { name: 'آخر من يصمد', well: false },
+    flag: { name: 'خطف الراية', well: false },
   };
 
   const CAMPAIGN = [
@@ -343,6 +345,36 @@
         n: 0, name: 'خريطتي', region: 'desert', mission, time: 'day', brief: 'خريطة من تصميمك. ' + DEFAULT_BRIEF[mission],
         rows, waypoints: null, level: 6, regionIdx: 1, well: true, mix: REGIONS.oasis.mix, custom: true,
         params: mission === 'towers' ? { towerHp: 7 } : { enemies: 20 },
+      };
+    },
+    // Arenas for duels between friends: the same on every side, so no corner is better than another.
+    // 'duel' mirrors the map four ways; 'flag' turns it half a circle, with bases in two opposite corners
+    arena(mode, seed) {
+      const rand = rng(seed || 1), region = REGION_ORDER[(seed >>> 2) % 5];
+      const grid = Array.from({ length: 13 }, () => Array(13).fill('.'));
+      const put = (x, y, ch) => {
+        const spots = mode === 'flag' ? [[x, y], [12 - x, 12 - y]] : [[x, y], [12 - x, y], [x, 12 - y], [12 - x, 12 - y]];
+        for (const [a, b] of spots) grid[b][a] = ch;
+      };
+      const pieces = region === 'oasis' ? '##%%~-' : region === 'mountains' ? '##@@--' : region === 'coast' ? '##%~-@' : region === 'oldcity' ? '###@%-' : '###%-@';
+      const span = mode === 'flag' ? 12 : 6;
+      for (let i = 0; i < (mode === 'flag' ? 26 : 13); i++) {
+        const x = Math.floor(rand() * (span + 1)), y = Math.floor(rand() * 7);
+        const ch = pieces[Math.floor(rand() * pieces.length)];
+        put(x, y, ch);
+        if (ch === '#' && rand() < 0.6) put(Math.min(span, x + 1), y, '#');
+      }
+      // keep the corners (spawns and bases) and a cross of lanes open
+      for (let y = 0; y < 13; y++) for (let x = 0; x < 13; x++) {
+        const corner = (x <= 1 || x >= 11) && (y <= 1 || y >= 11);
+        if (corner || x === 6 || y === 6) grid[y][x] = grid[y][x] === '%' || grid[y][x] === '-' ? grid[y][x] : '.';
+        if (corner) grid[y][x] = '.';
+      }
+      connect(grid, [[0, 0], [12, 0], [0, 12], [12, 12], [6, 6]], rand);
+      const name = mode === 'flag' ? 'خطف الراية' : 'آخر من يصمد';
+      return {
+        n: 0, name, region, mission: mode, duel: mode, time: seed % 3 === 1 ? 'dusk' : 'day', brief: name,
+        rows: grid.map(r => r.join('')), waypoints: null, level: 0, regionIdx: REGION_ORDER.indexOf(region), well: false, mix: [1, 0, 0, 0, 0], params: {},
       };
     },
     // The training ground for the lesson with Commander Salem (26x26 blocks of 8px)

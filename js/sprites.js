@@ -727,6 +727,19 @@
   }
 
   let fx = null;
+  // A team's flag for capture the flag: a pennant on a pole, swaying between two frames
+  function flagCanvas(light, dark, frame) {
+    const g = blank(16, 16);
+    for (let y = 1; y <= 15; y++) { g[y][3] = '#D9C7A2'; g[y][4] = '#8C7A5A'; }
+    g[0][3] = '#F2B134'; g[0][4] = '#C98512';
+    for (let y = 1; y <= 8; y++) {
+      const len = 10 - Math.abs(y - 4.5) * 1.6 + (frame && y % 2 ? 1 : 0);
+      for (let x = 5; x < 5 + len; x++) g[y][x] = y <= 2 ? light : y >= 7 ? dark : (x + y + frame) % 5 === 0 ? dark : light;
+    }
+    for (const [x, y] of [[8, 4], [9, 4], [8, 5], [9, 5]]) g[y][x] = '#FFFFFF';
+    return toCanvas(outline(g, '#1A1208'));
+  }
+
   function effects() {
     if (!fx) {
       fx = {
@@ -747,6 +760,7 @@
         lantern: lanternCanvas(),
         dhow: dhowCanvas(),
         falcon: [falconCanvas(0), falconCanvas(1)],
+        flags: [[flagCanvas('#57C072', '#1F7A45', 0), flagCanvas('#57C072', '#1F7A45', 1)], [flagCanvas('#5AA8EA', '#1C5DA6', 0), flagCanvas('#5AA8EA', '#1C5DA6', 1)]],
         portrait: portraitCanvas(),
         frame: frameTile(),
         powerups: {},

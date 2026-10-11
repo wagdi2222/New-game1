@@ -289,6 +289,16 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 .who-big img{width:72px;height:72px;border-radius:50%;border:3px solid var(--gold);background:#0F4C55;flex:none}
 .who-big b{display:block;color:var(--gold);font-size:1.15rem}
 .who-big span{color:var(--cream);font-weight:700}
+.team0{color:#57C072}
+.team1{color:#5AA8EA}
+.chip .kills{font-size:.78rem;color:var(--sand);font-weight:800}
+.ranking{display:flex;flex-direction:column;gap:6px}
+.rk{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:12px;padding:6px 10px}
+.rk.win{border-color:var(--gold);background:rgba(242,177,52,.12)}
+.rk > b{width:22px;text-align:center;color:var(--gold);font-size:1.1rem}
+.rk img{width:30px;height:30px}
+.rk span{flex:1;font-weight:800}
+.rk small{color:var(--sand);font-weight:700}
 .xp{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;color:var(--sand)}
 .xp:empty{display:none}
 .xp img{width:34px;height:34px}
@@ -432,6 +442,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
       <div id="on-hostctl" style="display:flex;flex-direction:column;gap:10px">
         <button class="btn" id="on-pick"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>اختر المرحلة وابدأ</button>
         <div class="row"><button class="btn ghost" id="on-daily">تحدي اليوم</button><button class="btn ghost" id="on-mymap">خريطتي</button></div>
+        <div class="row"><button class="btn ghost" id="on-duel">مبارزة: آخر من يصمد</button><button class="btn ghost" id="on-flag">خطف الراية</button></div>
       </div>
       <p id="on-wait">بانتظار المضيف ليختار المرحلة…</p>
       <button class="btn ghost" id="on-leave">اخرج من الغرفة</button>
@@ -466,7 +477,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
       <li>عصا التحكم: اختر «عصا» من الإعدادات لتتحرك بعصا مثل يد البلايستيشن. ادفعها مائلة بين جهتين، وإذا انسدّ الطريق في الجهة الأولى انزلقت الدبابة في الثانية حتى تجد منفذاً.</li>
       <li>إمالة الجوال: اختر «إمالة الجوال» من الإعدادات، ثم أمِل الجوال نحو الجهة التي تريد أن تسير إليها الدبابة. تُضبط الإمالة على وضع يدك عند بداية كل معركة، والمس دائرة الإمالة لضبطها من جديد.</li>
       <li>لاعبان على جوال واحد: كل لاعب له جهة من الشاشة فيها لوحة اتجاهات وزر نار. يُفضّل وضع الجوال أفقياً.</li>
-      <li>العب مع أصدقائك عبر الإنترنت: أنشئ غرفة وأرسل رابطها على واتساب، فيدخل معك حتى ثلاثة أصدقاء كل من جواله، ولو من المتصفح دون تثبيت. يختار صاحب الغرفة المرحلة، ويشترك الجميع في حماية البئر.</li>
+      <li>العب مع أصدقائك عبر الإنترنت: أنشئ غرفة وأرسل رابطها على واتساب، فيدخل معك حتى ثلاثة أصدقاء كل من جواله، ولو من المتصفح دون تثبيت. يختار صاحب الغرفة المرحلة، ويشترك الجميع في حماية البئر. ومن الغرفة نفسها يبدأ مبارزة بينكم: «آخر من يصمد» لكل لاعب فيها ثلاث عربات، و«خطف الراية» بين فريقين (الأول والثالث ضد الثاني والرابع): اخطف راية الخصم وأعدها إلى قاعدتك ورايتك في مكانها. في المبارزات لا ترقيات ولا صقور، والكل متساوون.</li>
       <li>لوحة المفاتيح: <kbd>WASD</kbd> و<kbd>Space</kbd> للاعب الأول، و<kbd>الأسهم</kbd> و<kbd>Enter</kbd> للثاني، و<kbd>F</kbd> للصقر، و<kbd>P</kbd> للإيقاف. يد التحكم مدعومة.</li>
     </ul></section>
     <section><h3>الأرض</h3><div class="items" id="help-terrain"></div></section>
@@ -534,6 +545,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
   <div class="hud" id="hudB">
     <div class="chip"><small>النقاط</small><b id="h-score">٠</b></div>
     <div class="chip" id="h-obj"><img id="h-obj-ico" alt=""><small id="h-obj-label"></small><b id="h-obj-val"></b></div>
+    <div class="chip" id="h-caps" hidden><img id="ico-caps" alt=""><b class="team0" id="h-caps0">٠</b><small>–</small><b class="team1" id="h-caps1">٠</b></div>
     <div class="chip" id="h-well"><img id="ico-well" alt=""><div class="hp well" id="h-wellhp"></div></div>
     <div class="chip" id="h-boss" hidden><img id="ico-boss" alt=""><div class="bossbar"><i id="h-bossbar"></i></div></div>
     <button class="chip" id="h-falcon2" hidden aria-label="استدعِ الصقر"><img id="ico-falcon2" alt=""><b id="h-falcons2">٠</b></button>
@@ -583,6 +595,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <p id="r-why"></p>
     <div class="big-num" id="r-score">٠</div>
     <div class="earned" id="r-earned"></div>
+    <div class="ranking" id="r-rank" hidden></div>
     <div class="newmedals" id="r-medals"></div>
     <div class="xp" id="r-xp"></div>
     <button class="btn wa" id="r-share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>شارك انتصارك</button>

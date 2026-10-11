@@ -350,6 +350,10 @@
       else if (name === 'zellige') s = zellige();
       else if (name === 'engine') s = engine();
       else if (name === 'coin') s = coin();
+      else if (name === 'duel') s = svg(swords + star5(32, 13, 9), GOLD);
+      else if (name === 'flag') s = svg([[14, '#57C072', '#1F7A45', 1], [38, '#5AA8EA', '#1C5DA6', -1]].map(([x, a, b]) =>
+        `<rect x="${x}" y="8" width="4.5" height="48" rx="2" fill="#D9C7A2" ${O}/><path d="M${x + 4.5} 10L${x + 4.5 + 20} 18L${x + 4.5} 27Z" fill="${a}" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>` +
+        `<path d="M${x + 4.5} 21L${x + 4.5 + 13} 18" stroke="${b}" stroke-width="2.4" stroke-linecap="round"/>`).join(''));
       else if (name.startsWith('rank:')) s = rankIcon(+name.slice(5));
       else throw new Error('no icon ' + name);
       urls.set(name, toURL(s));

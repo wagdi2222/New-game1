@@ -67,7 +67,8 @@
   for (const k of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba', 'najda']) ICON.pu[k] = V(k);
   for (const r of ['desert', 'oasis', 'mountains', 'coast', 'oldcity']) ICON.region[r] = V('region:' + r);
   const MISSION_ICON = { defend: ICON.well, collect: ICON.skin, towers: ICON.tower, escort: ICON.camel, survive: ICON.lantern, boss: ICON.boss };
-  const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss };
+  const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss, duel: V('duel'), flag: V('flag') };
+  const TEAM_NAMES = ['فريق النخلة', 'فريق الموج'], TEAM_COLORS = ['#57C072', '#5AA8EA'];
   const TIME_NAME = { day: 'نهار', dawn: 'فجر', dusk: 'غروب', night: 'ليل' };
   const MAQAM_NAME = { hijaz: 'مقام الحجاز', bayati: 'مقام البيات', kurd: 'مقام الكرد', saba: 'مقام الصبا', rast: 'مقام الرست', nahawand: 'مقام النهاوند' };
   const RHYTHM = { desert: 'maqsum', oasis: 'baladi', mountains: 'saidi', coast: 'maqsum', oldcity: 'baladi' };
@@ -579,7 +580,7 @@
 
   // ---------- medals ----------
   const MEDALS = [
-    { id: 'first', name: 'أول نصر', desc: 'افز بأي مرحلة', icon: ICON.well, test: c => c.r && c.r.won },
+    { id: 'first', name: 'أول نصر', desc: 'افز بأي مرحلة', icon: ICON.well, test: c => c.r && c.r.won && !c.r.duel },
     { id: 'hunter', name: 'صائد العقارب', desc: 'دمّر مئة مركبة', icon: ICON.foe, test: () => save.stats.kills >= 100 },
     { id: 'keeper', name: 'حارس البئر', desc: 'افز بمهمة دون أن يُصاب البئر', icon: ICON.well, test: c => c.r && c.r.won && c.r.stage.well && !c.r.stats.wellDamaged },
     { id: 'caravan', name: 'قائد القافلة', desc: 'أوصل القافلة كاملة', icon: ICON.camel, test: c => c.r && c.r.won && c.r.mission === 'escort' && c.r.stats.camelsLost === 0 },
@@ -589,15 +590,21 @@
     { id: 'falconer', name: 'الصقّار', desc: 'أطلق الصقر عشر مرات', icon: ICON.falcon, test: () => save.stats.falcon >= 10 },
     { id: 'merchant', name: 'تاجر السوق', desc: 'اشترِ من السوق خمس مرات', icon: ICON.pu.coffee, test: () => save.stats.buys >= 5 },
     { id: 'architect', name: 'المهندس', desc: 'العب على خريطة من تصميمك', icon: ICON.pu.mason, test: c => c.r && c.r.stage.custom },
-    { id: 'duo', name: 'الرفيقان', desc: 'افوزا معاً على جوال واحد', icon: ICON.p2, test: c => c.r && c.r.won && c.r.players === 2 },
+    { id: 'duo', name: 'الرفيقان', desc: 'افوزا معاً على جوال واحد', icon: ICON.p2, test: c => c.r && c.r.won && c.r.players === 2 && !c.r.online && !c.r.duel },
     { id: 'daily', name: 'المثابر', desc: 'العب تحدي اليوم في ثلاثة أيام', icon: ICON.pu.dates, test: () => save.stats.daily.length >= 3 },
     { id: 'untouched', name: 'لا يُمَس', desc: 'افز دون أن تُصاب دبابتك', icon: ICON.pu.shield, test: c => c.r && c.r.won && c.r.noDamage },
     { id: 'sniper', name: 'القنّاص', desc: 'دمّر خمس مركبات في عشر ثوانٍ', icon: ICON.pu.hammer, test: c => c.r && c.r.stats.combo },
     { id: 'water', name: 'جامع القِرَب', desc: 'اجمع كل القِرَب في مهمة', icon: ICON.skin, test: c => c.r && c.r.won && c.r.mission === 'collect' && c.r.stats.skinsStolen === 0 && c.r.stats.skinsCollected >= c.r.stage.rows.join('').split('Q').length - 1 },
     { id: 'traveler', name: 'الرحّالة', desc: 'اوصل إلى المدينة القديمة', icon: ICON.lantern, test: () => save.unlocked >= 17 },
     { id: 'hero', name: 'بطل الواحة', desc: 'أكمل الرحلة كلها', icon: ICON.star, test: () => save.unlocked > L.count },
-    { id: 'friends', name: 'أصدقاء الواحة', desc: 'افوزوا معاً عبر الإنترنت', icon: ICON.players[2], test: c => c.r && c.r.won && c.r.online },
+    { id: 'friends', name: 'أصدقاء الواحة', desc: 'افوزوا معاً عبر الإنترنت', icon: ICON.players[2], test: c => c.r && c.r.won && c.r.online && !c.r.duel },
     { id: 'stars', name: 'نجوم الصحراء', desc: 'اجمع ثلاثين نجمة', icon: ICON.star, test: () => totalStars() >= 30 },
+    { id: 'student', name: 'تلميذ القائد', desc: 'أنهِ الدرس مع القائد سالم', icon: ICON.commander, test: c => c.r && c.r.tutorial && c.r.won },
+    { id: 'officer', name: 'ضابط الواحة', desc: 'ابلغ رتبة ملازم', icon: V('rank:5'), test: () => myRank().index >= 5 },
+    { id: 'stylish', name: 'الأنيق', desc: 'اشترِ لوناً لعربتك من السوق', icon: V('vehicle:A:sk_sadu'), test: () => save.skins.length >= 1 },
+    { id: 'loyal', name: 'الرفيق الوفي', desc: 'أعطِ رفيقاً عربة من عرباتك', icon: ICON.pu.najda, test: () => (save.stats.gave || 0) >= 1 },
+    { id: 'duelist', name: 'بطل المبارزة', desc: 'افز بمبارزة مع أصدقائك', icon: V('duel'), test: c => c.r && c.r.duel && c.r.iWon },
+    { id: 'bearer', name: 'حامل الراية', desc: 'اخطف ثلاث رايات', icon: V('flag'), test: () => (save.stats.flags || 0) >= 3 },
   ];
   function checkMedals(result) {
     const fresh = [];
@@ -752,7 +759,17 @@
       if (name === 'gameover') setTimeout(() => showOver(data), 250); else setTimeout(() => showResult(data), 150);
     } else if (name === 'powerup') { powerupToast(data); if (tut) tut.picked = true; }
     else if (name === 'toast') toast(data);
-    else if (name === 'rescued') {
+    else if (name === 'frag' || name === 'capture' || name === 'flagtaken' || name === 'flagback' || name === 'flagdrop') {
+      const text = name === 'frag' ? nameOf(data.by) + ' أصاب ' + nameOf(data.victim) + '!'
+        : name === 'capture' ? nameOf(data.pid) + ' خطف الراية! ' + TEAM_NAMES[data.team] + ' ' + fmt(data.caps[data.team])
+          : name === 'flagtaken' ? nameOf(data.pid) + ' أخذ راية ' + TEAM_NAMES[data.team]
+            : name === 'flagback' ? 'عادت راية ' + TEAM_NAMES[data.team] + ' إلى قاعدتها' : nameOf(data.pid) + ' أسقط الراية';
+      toast(text);
+      if (hosting()) NET.capture('toast', text);
+    } else if (name === 'duelend') {
+      if (hosting()) NET.hostEnd(data);
+      setTimeout(() => showDuel(data), 150);
+    } else if (name === 'rescued') {
       const text = nameOf(data.from) + ' أعطى ' + nameOf(data.to) + ' عربة!';
       toast(text);
       if (hosting()) NET.capture('toast', text);
@@ -763,6 +780,7 @@
   }
   // A guest gets the end of the battle from the host
   function remoteEnd(r) {
+    if (r.duel) { showDuel(r); return; }
     if (r.won) showResult(r); else { TB.audio.play('over'); showOver(r); }
   }
 
@@ -780,8 +798,61 @@
     if (run.mode === 'daily' && !save.stats.daily.includes(r.stage.daily)) save.stats.daily.push(r.stage.daily);
   }
 
+  // A duel's results: the winner, everyone's hits (and flags), and what I earned
+  function showDuel(r) {
+    if (screen !== 'play') return;
+    TB.audio.engine('off'); TB.audio.stopMusic(); musicKey = '';
+    const me = r.ranking.find(x => x.pid === myPid) || { kills: 0, caps: 0 };
+    const iWon = !!r.winner && (r.winner.pid === myPid || (r.winner.team != null && (myPid & 1) === r.winner.team));
+    Object.assign(r, { myKills: me.kills, iWon, coins: 20 + me.kills * 10 + me.caps * 15 + (iWon ? 40 : 0), online: true });
+    bank(r);
+    save.stats.duels = (save.stats.duels || 0) + (iWon ? 1 : 0);
+    save.stats.flags = (save.stats.flags || 0) + me.caps;
+    persist();
+    const fresh = checkMedals(r);
+    r.freshMedals = fresh;
+    lastResult = r;
+    $('r-title').textContent = !r.winner ? 'تعادل!' : r.winner.team != null ? 'فاز ' + TEAM_NAMES[r.winner.team] + '!' : r.winner.pid === myPid ? 'فزت بالمبارزة!' : 'فاز ' + nameOf(r.winner.pid) + '!';
+    $('r-why').textContent = L.MISSIONS[r.duel].name + (r.duel === 'flag' ? ' · ' + TEAM_NAMES[0] + ' ' + fmt(r.caps[0]) + ' – ' + fmt(r.caps[1]) + ' ' + TEAM_NAMES[1] : '');
+    $('r-score').textContent = '⚔ ' + fmt(me.kills);
+    document.querySelector('#result .result-stars').hidden = true;
+    const box = $('r-rank');
+    box.textContent = '';
+    const order = r.ranking.slice().sort((a, b) => {
+      const wa = r.winner && (r.winner.pid === a.pid || (r.winner.team != null && (a.pid & 1) === r.winner.team)) ? 1 : 0;
+      const wb = r.winner && (r.winner.pid === b.pid || (r.winner.team != null && (b.pid & 1) === r.winner.team)) ? 1 : 0;
+      return wb - wa || b.caps - a.caps || b.kills - a.kills || b.lives - a.lives;
+    });
+    order.forEach((x, i) => {
+      const won = r.winner && (r.winner.pid === x.pid || (r.winner.team != null && (x.pid & 1) === r.winner.team));
+      const row = el('div', 'rk' + (won ? ' win' : ''));
+      row.append(el('b', null, fmt(i + 1)), img(V('vehicle:A:' + game.paletteOf(x.pid))), el('span', null, x.pid === myPid ? 'أنت' : nameOf(x.pid)),
+        el('small', null, '⚔ ' + fmt(x.kills) + (r.duel === 'flag' ? ' · رايات ' + fmt(x.caps) : '')));
+      box.append(row);
+    });
+    box.hidden = false;
+    const earned = $('r-earned');
+    earned.textContent = '';
+    const coins = el('span', 'pill'); coins.append(el('i', 'coin'), document.createTextNode('+' + fmt(r.coins) + ' درهم'));
+    earned.append(coins);
+    const medals = $('r-medals');
+    medals.textContent = '';
+    for (const m of fresh) medals.append(medalEl(m, false));
+    showXP('r-xp', r, fresh.length);
+    $('r-next').hidden = true;
+    $('r-retry').hidden = guest();
+    $('r-retry').textContent = 'مبارزة أخرى';
+    $('r-map').textContent = guest() ? 'اخرج من الغرفة' : 'عُد إلى الغرفة';
+    $('r-share').hidden = !iWon;
+    $('result').hidden = false;
+    TB.audio.play(iWon ? 'clear' : 'pause');
+  }
+
   async function showResult(r) {
     if (screen !== 'play') return;
+    document.querySelector('#result .result-stars').hidden = false;
+    $('r-rank').hidden = true;
+    $('r-retry').textContent = 'أعد المرحلة';
     TB.audio.engine('off');
     TB.audio.stopMusic(); musicKey = '';
     const n = r.stage.n, mode = run.mode;
@@ -855,6 +926,14 @@
     const r = lastResult;
     if (!r) return;
     const st = r.stage, rank = myRank();
+    if (r.duel) {
+      const canvas = await TB.share.card({
+        title: $('r-title').textContent, sub: L.MISSIONS[r.duel].name + ' · مع أصدقائي', stars: null, score: '⚔ ' + fmt(r.myKills) + ' إصابات',
+        name: settings.name || 'حارس', rank: rank.name, rankIcon: V('rank:' + rank.index), tankIcon: myTankIcon(), medals: (r.freshMedals || []).map(m => m.icon),
+      });
+      showCard(canvas, 'انتصرت في مبارزة «حُرّاس الواحة»! تعال نتبارز: ' + TB.share.SITE);
+      return;
+    }
     const canvas = await TB.share.card({
       title: 'انتصار!', sub: stageLabel(st, run.mode), stars: r.stars, score: fmt(r.score) + ' نقطة',
       extra: L.REGIONS[st.region].name + ' · ' + L.MISSIONS[st.mission].name + (r.online ? ' · مع أصدقائي' : ''),
@@ -884,7 +963,7 @@
     else goJourney();
   };
   $('r-next').onclick = () => { const n = run.stage.n + 1; $('result').hidden = true; if (run.mode === 'tutorial') buildJourney(); openBrief(L.get(n), n > L.count ? 'endless' : 'campaign'); };
-  $('r-retry').onclick = () => (hosting() ? NET.hostStart(run) : startStage(run));
+  $('r-retry').onclick = () => (run.stage.duel ? NET.hostStart(NET.arenaRun(run.stage.duel)) : hosting() ? NET.hostStart(run) : startStage(run));
   $('r-map').onclick = backFromBattle;
 
   function showOver(r) {
@@ -927,7 +1006,7 @@
   }
 
   // ---------- HUD ----------
-  $('ico-well').src = ICON.well; $('ico-boss').src = ICON.boss;
+  $('ico-well').src = ICON.well; $('ico-boss').src = ICON.boss; $('ico-caps').src = V('flag');
   $('ico-falcon').src = ICON.falcon; $('ico-falcon2').src = ICON.falcon;
   let hud = {};
   function pips(box, n, max) {
@@ -944,12 +1023,14 @@
       for (let k = 0; k < 3; k++) lvl.append(el('i'));
       c.append(img(V('vehicle:A:' + game.paletteOf(i))));
       if (names) c.append(el('span', 'nm', i === myPid ? 'أنت' : names[i] || ''));
-      const give = el('span', 'give', '+ عربة');
+      const give = el('span', 'give', '+ عربة'), kills = el('span', 'kills');
       give.hidden = true;
-      c.append(lives, hp, lvl, give);
+      kills.hidden = !game.duel;
+      c.append(lives, hp, lvl, kills, give);
+      if (game.duel === 'flag') c.style.borderColor = TEAM_COLORS[i & 1];
       c.onclick = () => rescue(i);
       box.append(c);
-      return { c, lives, hp, lvl, give };
+      return { c, lives, hp, lvl, give, kills };
     });
   }
   // ---------- helping teammates: giving a car, quick chat ----------
@@ -965,7 +1046,10 @@
   function rescue(pid) {
     const from = giverFor(pid);
     if (from < 0) return;
-    if (guest()) NET.give(pid); else game.giveLife(from, pid);
+    if (guest()) NET.give(pid); else if (!game.giveLife(from, pid)) return;
+    save.stats.gave = (save.stats.gave || 0) + 1;
+    persist();
+    checkMedals(null);
   }
   const CHAT = ['احمِ البئر!', 'أنا قادم!', 'ساعدني!', 'أحسنت!', 'هجوم!', 'اتبعني', 'انتبه للمدفعية!', 'شكراً'];
   let chats = [], chatAt = 0;
@@ -994,13 +1078,14 @@
     const st = game.stage;
     set('stage', run.mode + st.n + st.region, () => {
       $('ico-region').src = ICON.region[st.region];
-      $('h-stage').textContent = run.mode === 'tutorial' ? 'الدرس' : run.mode === 'daily' ? 'اليوم' : run.mode === 'custom' ? 'خريطتي' : run.mode === 'endless' ? 'ساحة ' + fmt(st.n - L.count) : fmt(st.n);
+      $('h-stage').textContent = st.duel === 'duel' ? 'مبارزة' : st.duel === 'flag' ? 'الراية' : run.mode === 'tutorial' ? 'الدرس' : run.mode === 'daily' ? 'اليوم' : run.mode === 'custom' ? 'خريطتي' : run.mode === 'endless' ? 'ساحة ' + fmt(st.n - L.count) : fmt(st.n);
     });
     game.players.forEach((pl, i) => {
       const t = pl.tank, chip = chips[i], max = t ? t.max : 3 + ((pl.upg && pl.upg.armor) || 0);
       if (!chip) return;
-      set('p' + i, [pl.lives, t ? t.hp : 0, max, pl.level, names && names[i]].join(), () => {
-        chip.lives.textContent = fmt(Math.max(0, pl.lives));
+      set('p' + i, [pl.lives, t ? t.hp : 0, max, pl.level, names && names[i], pl.kills].join(), () => {
+        chip.lives.textContent = game.duel === 'flag' ? '∞' : fmt(Math.max(0, pl.lives));
+        chip.kills.textContent = '⚔ ' + fmt(pl.kills || 0);
         pips(chip.hp, t ? Math.max(0, t.hp) : 0, max);
         [...chip.lvl.children].forEach((s, j) => s.classList.toggle('on', j < pl.level));
         chip.c.classList.toggle('gone', pl.lives <= 0 && !t);
@@ -1019,6 +1104,10 @@
       $('h-boss').hidden = obj.icon !== 'boss';
       if (obj.icon === 'boss') $('h-bossbar').style.width = Math.max(0, 100 * obj.value / obj.max) + '%';
     });
+    set('caps', obj.caps ? obj.caps.join('-') + game.duel : 'none', () => {
+      $('h-caps').hidden = !(obj.caps && game.duel === 'flag');
+      if (obj.caps) { $('h-caps0').textContent = fmt(obj.caps[0]); $('h-caps1').textContent = fmt(obj.caps[1]); }
+    });
     const w = game.well;
     set('well', w ? w.hp + '/' + w.max : 'none', () => {
       $('h-well').hidden = !w;
@@ -1030,7 +1119,7 @@
       $('h-falcons').textContent = fmt(falcons);
       $('h-falcons2').textContent = fmt(falcons);
       $('b-falcon').disabled = !canFalcon;
-      $('b-falcon').hidden = local2 || (falcons === 0 && save.falcons === 0);
+      $('b-falcon').hidden = local2 || !!game.duel || (falcons === 0 && save.falcons === 0);
       $('h-falcon2').hidden = !local2 || falcons === 0;
     });
   }
@@ -1103,7 +1192,7 @@
         const t = pl.tank;
         if (!t) return;
         const text = i === myPid ? 'أنت' : names[i] || '';
-        cvx.fillStyle = PLAYER_COLORS[i];
+        cvx.fillStyle = game.duel === 'flag' ? TEAM_COLORS[i & 1] : PLAYER_COLORS[i];
         cvx.strokeText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
         cvx.fillText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
       });

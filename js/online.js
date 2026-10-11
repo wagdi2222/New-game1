@@ -235,6 +235,16 @@
     const g = ui().game;
     broadcast({ t: 'snap', s: g.snapshot(), ev: O.events.splice(0) }, true);
     const st = result.stats;
+    if (result.duel) {
+      broadcast({
+        t: 'end', r: {
+          duel: result.duel, winner: result.winner, caps: result.caps, ranking: result.ranking, won: true, stars: 0, score: 0, coins: 0, mission: result.mission,
+          players: result.players, stats: { kills: [0, 0, 0, 0, 0], towers: 0, boss: 0, falconUses: 0, deaths: st.deaths },
+        },
+      }, true);
+      O.inGame = false;
+      return;
+    }
     broadcast({
       t: 'end', r: {
         won: result.won, stars: result.stars, score: result.score, coins: result.coins, reason: result.reason, mission: result.mission,
@@ -397,6 +407,8 @@
     u.gtoast(u.ICON.foe, 'انقطع الاتصال بالمضيف', 'تأكد من الإنترنت وادخل الغرفة من جديد');
   }
 
+  const arenaRun = mode => ({ stage: L.arena(mode, 1 + Math.floor(Math.random() * 1e6)), mode });
+
   function chat(i) {
     if (O.role === 'host') relayChat(0, i);
     else send(O.conn, { t: 'chat', i });
@@ -511,8 +523,14 @@
     $('on-pick').onclick = () => ui().pickOnline();
     $('on-daily').onclick = () => ui().openBrief(L.daily(), 'daily');
     $('on-mymap').onclick = () => ui().openBrief(L.custom(ui().customMap()), 'custom');
+    const duel = mode => {
+      if (O.players.length < 2) { ui().gtoast(ui().ICON.foe, 'تحتاج صديقاً واحداً على الأقل', 'ادعُ صديقاً بالرابط ثم ابدأ المبارزة'); return; }
+      hostStart(arenaRun(mode));
+    };
+    $('on-duel').onclick = () => duel('duel');
+    $('on-flag').onclick = () => duel('flag');
     setInterval(heartbeat, 1000);
   }
 
-  Object.assign(O, { init, open, hostStart, hostFrame, hostEnd, capture, setPause, toLobby, clientFrame, clientFalcon, leave, renderRoom, chat, give });
+  Object.assign(O, { init, open, hostStart, hostFrame, hostEnd, capture, setPause, toLobby, clientFrame, clientFalcon, leave, renderRoom, chat, give, arenaRun });
 })();

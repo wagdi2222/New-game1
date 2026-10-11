@@ -13,6 +13,12 @@
   const PALETTES = ['p1', 'p2', 'p3', 'p4'];
   const TOP_SPAWNS = [{ x: 96, y: 0 }, { x: 192, y: 0 }, { x: 0, y: 0 }];
   const PLAYER_SPEED = 0.75;
+  // Duels between friends: corners for 'last one standing'; two teams (seats 1+3, 2+4) and their bases for the flag
+  const DUEL_SPAWN = [{ x: 0, y: 192 }, { x: 192, y: 0 }, { x: 192, y: 192 }, { x: 0, y: 0 }];
+  const FLAG_SPAWN = [{ x: 32, y: 192 }, { x: 160, y: 0 }, { x: 0, y: 160 }, { x: 192, y: 32 }];
+  const BASES = [{ x: 0, y: 192 }, { x: 192, y: 0 }];
+  const DUEL_TIME = { duel: 180, flag: 240 }, CAPS_TO_WIN = 3;
+  const DUEL_POWERUPS = ['shield', 'hammer', 'dates', 'coffee', 'qirba'];
 
   const ENEMY = [
     { id: 'jeep', name: 'الجوّال', design: 'jeep', speed: 1.05, bullet: 2.2, hp: 1, score: 100, coins: 5, fire: 1 },
@@ -128,6 +134,18 @@
         camelsLost: 0, camelsArrived: 0, skinsCollected: 0, skinsStolen: 0, combo: false, recentKills: [],
       };
       this.endTimer = 0; this.result = null;
+      this.duel = st.duel || null; this.flags = []; this.caps = null; this.winner = null;
+      if (this.duel) {
+        // Everyone starts equal: no bought armour, cannon or engine, and no falcons
+        this.timer = this.timerMax = DUEL_TIME[this.duel] * 60;
+        this.caps = [0, 0];
+        if (this.duel === 'flag') this.flags = BASES.map((b, team) => ({ team, x: b.x, y: b.y, carrier: -1, home: true }));
+        this.puTimer = 360;
+        for (const pl of this.players) {
+          pl.upg = { armor: 0, cannon: 0, engine: 0 }; pl.level = 0; pl.kills = 0; pl.caps = 0;
+          pl.lives = this.duel === 'flag' ? 99 : 3;
+        }
+      }
       for (const inp of this.inputs) { inp.dir = -1; inp.fire = false; }
       this.state = 'intro';
     }
@@ -269,13 +287,19 @@
       return Object.assign(t, extra || {});
     }
 
+    spawnPoint(pid) { return (this.duel === 'flag' ? FLAG_SPAWN : this.duel ? DUEL_SPAWN : P_SPAWN)[pid]; }
     spawnPlayer(pl) {
-      const sp = P_SPAWN[pl.pid];
+      const sp = this.spawnPoint(pl.pid);
       this.spawns.push({ team: 'p', pid: pl.pid, x: sp.x, y: sp.y, t: 36 });
     }
 
     // Whether vehicle b is an enemy of vehicle a
-    isFoe(a, b) { return a !== b && a.team !== b.team; }
+    isFoe(a, b) {
+      if (!a || !b || a === b) return false;
+      if (this.duel && a.team === 'p' && b.team === 'p') return this.duel === 'flag' ? (a.pid & 1) !== (b.pid & 1) : true;
+      return a.team !== b.team;
+    }
+    teamOf(pid) { return pid & 1; }
 
     tankBlocked(t, x, y) {
       const s = t.size;
@@ -421,6 +445,7 @@
 
     // ---------- enemies ----------
     enemySpawner() {
+      if (this.duel) return;
       const queued = this.mission === 'defend' || this.mission === 'tutorial';
       const spawning = queued ? this.queue.length > 0 : this.state === 'play';
       if (!spawning) return;
@@ -453,7 +478,7 @@
       for (const s of this.spawns) {
         if (--s.t > 0) continue;
         if (s.team === 'p') {
-          const pl = this.players[s.pid], p = this.makeTank('p', 0, s.x, s.y, { pid: s.pid });
+          const pl = this.players[s.pid], p = this.makeTank('p', 0, s.x, s.y, { pid: s.pid, dir: s.y < 96 ? 2 : 0 });
           p.hp = p.max = 3 + pl.upg.armor;
           p.shield = this.diff.shield;
           pl.tank = p;
@@ -695,8 +720,8 @@
       }
       for (const t of this.tanks) {
         if (t.dead || t === b.owner || !hit(bx, by, 4, 4, t.x + 1, t.y + 1, t.size - 2, t.size - 2)) continue;
-        if (t.team === b.team) {
-          if (t.team !== 'p') continue;
+        if (!this.isFoe(b.owner, t)) {
+          if (t.team !== 'p' || b.team !== 'p') continue;
           // A teammate's shell only stuns
           this.killBullet(b, true);
           t.stun = 45;
@@ -707,7 +732,7 @@
         return;
       }
       for (const o of this.bullets) {
-        if (o === b || o.dead || o.team === b.team || !hit(bx, by, 4, 4, o.x - 2, o.y - 2, 4, 4)) continue;
+        if (o === b || o.dead || !this.isFoe(o.owner, b.owner) || !hit(bx, by, 4, 4, o.x - 2, o.y - 2, 4, 4)) continue;
         this.killBullet(b, false); this.killBullet(o, false);
         return;
       }
@@ -751,7 +776,7 @@
     hitTank(t, b) {
       if (t.team === 'p') {
         if (t.shield > 0) { this.sound('stone'); return; }
-        this.damagePlayer(t, b.dmg);
+        this.damagePlayer(t, b.dmg, b.owner && b.owner.team === 'p' ? b.owner.pid : null);
         return;
       }
       this.damageEnemy(t, b.dmg);
@@ -783,17 +808,17 @@
       if (e.kind < 0) this.boss = null;
     }
 
-    damagePlayer(p, dmg) {
+    damagePlayer(p, dmg, by) {
       if (p.dead || p.shield > 0) return;
       p.hp -= dmg;
       p.flash = 14;
       this.stats.hpLost += dmg;
       this.sound('hurt');
       this.vibrate(60);
-      if (p.hp <= 0) this.killPlayer(p);
+      if (p.hp <= 0) this.killPlayer(p, by);
     }
 
-    killPlayer(p) {
+    killPlayer(p, by) {
       const pl = this.players[p.pid];
       p.dead = true;
       pl.tank = null;
@@ -801,8 +826,17 @@
       this.sound('die');
       this.vibrate(220);
       pl.level = Math.min(3, pl.upg.cannon);
-      pl.lives--;
       this.stats.deaths++;
+      if (this.duel) {
+        if (by != null && by !== pl.pid && this.players[by]) { this.players[by].kills++; this.emit('frag', { by, victim: pl.pid }); }
+        this.dropFlag(pl.pid);
+        if (this.duel === 'flag') { pl.respawn = 180; return; }
+        pl.lives--;
+        if (pl.lives > 0) pl.respawn = 120;
+        else if (this.players.filter(q => q.lives > 0 && !q.away).length <= 1) this.endDuel();
+        return;
+      }
+      pl.lives--;
       if (pl.lives > 0) pl.respawn = 50;
       else if (this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
     }
@@ -921,9 +955,17 @@
 
     // ---------- power-ups ----------
     spawnPowerup(nx, ny) {
+      if (this.duel) {
+        const pool = DUEL_POWERUPS.filter(p => p !== 'dates' || this.duel === 'duel');
+        return this.placePowerup(pool[Math.floor(Math.random() * pool.length)], nx, ny);
+      }
       const out = this.players.some(q => q.lives <= 0 && !q.away);
       const pool = POWERUPS.filter(p => (p !== 'mason' || this.well) && (p !== 'falcon' || this.tanks.some(t => t.team === 'e')) && p !== 'najda');
       const type = out && Math.random() < 0.7 ? 'najda' : pool[Math.floor(Math.random() * pool.length)];
+      this.placePowerup(type, nx, ny);
+    }
+
+    placePowerup(type, nx, ny) {
       for (let i = 0; i < 60; i++) {
         const x = i === 0 && nx != null ? nx : Math.floor(Math.random() * 25) * 8, y = i === 0 && ny != null ? ny : Math.floor(Math.random() * 25) * 8;
         if (this.well && hit(x, y, 16, 16, 80, 176, 48, 32)) continue;
@@ -963,6 +1005,7 @@
         case 'dates': pl.lives++; p.hp = p.max; this.sound('life'); break;
         case 'coffee': pl.coffee = 600; this.sound('coffee'); break;
         case 'qirba':
+          if (this.duel) { p.hp = p.max; this.sound('water'); break; }
           if (this.well && !this.well.dead) this.well.hp = this.well.max;
           else if (this.camels.length) for (const c of this.camels) { if (!c.dead && !c.arrived) c.hp = c.max; }
           else for (const q of this.players) if (q.tank) q.tank.hp = q.tank.max;
@@ -1007,7 +1050,8 @@
         if (pl.tank) { pl.tank.dead = true; pl.tank = null; }
         pl.respawn = 0;
         this.inputs[pid].dir = -1; this.inputs[pid].alt = -1; this.inputs[pid].fire = false;
-        if (this.state === 'play' && this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
+        if (this.state === 'play' && this.duel) { this.dropFlag(pid); if (this.duel === 'duel' && this.players.filter(q => q.lives > 0 && !q.away).length <= 1) this.endDuel(); }
+        else if (this.state === 'play' && this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
       } else if (pl.lives > 0 && !pl.tank) pl.respawn = 30;
     }
 
@@ -1015,7 +1059,7 @@
 
     useFalcon(pid) {
       const pl = this.players[pid || 0];
-      if (this.state !== 'play' || this.falconsOf(pid || 0) <= 0 || !pl || !pl.tank) return false;
+      if (this.state !== 'play' || this.duel || this.falconsOf(pid || 0) <= 0 || !pl || !pl.tank) return false;
       if (!this.launchFalcon(pl.tank)) return false;
       if (this.sharedFalcons) this.falcons--; else pl.falcons--;
       this.emit('falcons', { pid: pid || 0, n: this.falconsOf(pid || 0), shared: this.sharedFalcons });
@@ -1078,6 +1122,7 @@
       for (const pl of this.players) this.updatePlayer(pl);
       for (const t of this.tanks) if (t.team === 'e' && !t.dead) this.updateEnemy(t);
       if (this.camels.length && this.state === 'play') this.updateCamels();
+      if (this.duel && this.state === 'play') this.updateDuel();
       this.updateBullets();
       this.updateShells();
       this.updateMines();
@@ -1093,6 +1138,69 @@
       if (this.state === 'play') this.checkMission();
       if (this.state === 'won' && ++this.endTimer === 120) this.finish(true);
       if (this.state === 'over' && ++this.endTimer === 200) this.finish(false);
+    }
+
+    // ---------- duels ----------
+    updateDuel() {
+      if (--this.timer <= 0) { this.timer = 0; this.endDuel(); return; }
+      if (this.timer === 1800) this.toast('بقيت نصف دقيقة!');
+      if (!this.powerup && --this.puTimer <= 0) { this.spawnPowerup(); this.puTimer = 540; }
+      if (this.duel === 'flag') this.updateFlags();
+    }
+
+    updateFlags() {
+      for (const f of this.flags) {
+        if (f.carrier >= 0) {
+          const t = this.players[f.carrier] && this.players[f.carrier].tank;
+          if (!t) { f.carrier = -1; continue; }
+          f.x = t.x; f.y = t.y;
+          // Captured: the carrier is home while their own team's flag is safe at home too
+          const team = f.team ^ 1, base = BASES[team];
+          if (this.flags[team].home && hit(t.x, t.y, 16, 16, base.x, base.y, 16, 16)) {
+            this.caps[team]++;
+            this.players[f.carrier].caps++;
+            this.emit('capture', { pid: f.carrier, team, caps: this.caps.slice() });
+            this.sound('clear');
+            this.vibrate([60, 40, 120]);
+            f.carrier = -1; f.home = true; f.x = BASES[f.team].x; f.y = BASES[f.team].y;
+            if (this.caps[team] >= CAPS_TO_WIN) this.endDuel();
+          }
+          continue;
+        }
+        for (const pl of this.players) {
+          const t = pl.tank;
+          if (!t || !hit(t.x + 2, t.y + 2, 12, 12, f.x, f.y, 16, 16)) continue;
+          if ((pl.pid & 1) === f.team) {
+            if (!f.home) { f.home = true; f.x = BASES[f.team].x; f.y = BASES[f.team].y; this.emit('flagback', { pid: pl.pid, team: f.team }); this.sound('coin'); }
+          } else if (!this.flags.some(o => o.carrier === pl.pid)) {
+            f.carrier = pl.pid; f.home = false;
+            this.emit('flagtaken', { pid: pl.pid, team: f.team });
+            this.sound('appear');
+          }
+          break;
+        }
+      }
+    }
+
+    dropFlag(pid) {
+      for (const f of this.flags) if (f.carrier === pid) { f.carrier = -1; this.emit('flagdrop', { pid, team: f.team }); }
+    }
+
+    // Who won: the last one with cars, or when time runs out the most cars then the most hits; for the flag, the most captures
+    endDuel() {
+      if (this.state !== 'play') return;
+      let winner = null;
+      if (this.duel === 'flag') {
+        if (this.caps[0] !== this.caps[1]) winner = { team: this.caps[0] > this.caps[1] ? 0 : 1 };
+      } else {
+        const ranked = this.players.filter(q => !q.away).slice().sort((a, b) => b.lives - a.lives || b.kills - a.kills);
+        if (ranked.length === 1 || (ranked.length > 1 && (ranked[0].lives !== ranked[1].lives || ranked[0].kills !== ranked[1].kills))) winner = { pid: ranked[0].pid };
+      }
+      this.winner = winner;
+      this.state = 'won';
+      this.endTimer = 0;
+      this.shells = [];
+      this.sound('clear');
     }
 
     updateSkins() {
@@ -1129,6 +1237,15 @@
     finish(won) {
       this.state = 'ended';
       const st = this.stats;
+      if (this.duel) {
+        this.result = {
+          duel: this.duel, winner: this.winner, caps: this.caps.slice(), stage: this.stage, mission: this.mission, players: this.nPlayers,
+          ranking: this.players.map(p => ({ pid: p.pid, kills: p.kills || 0, caps: p.caps || 0, lives: Math.max(0, Math.min(9, p.lives)) })),
+          won: true, stars: 0, score: 0, coins: 0, stats: st, difficulty: this.difficulty,
+        };
+        this.emit('duelend', this.result);
+        return;
+      }
       let stars = 0;
       if (won) {
         stars = 1;
@@ -1148,6 +1265,7 @@
     // ---------- what the HUD shows ----------
     objective() {
       if (this.remote) return this.remoteObjective || { icon: 'foe', value: 0 };
+      if (this.duel) return { icon: this.duel, value: Math.ceil(this.timer / 60), time: true, label: 'الوقت', caps: this.caps && this.caps.slice() };
       const st = this.stats;
       switch (this.mission) {
         case 'defend': return { icon: 'foe', value: this.queue.length + this.tanks.filter(t => t.team === 'e').length + this.spawns.filter(s => s.team === 'e').length, label: 'الأعداء' };
@@ -1166,7 +1284,8 @@
       const q = v => Math.round(v * 4) / 4;
       return {
         t: this.t, st: this.state, sc: this.score, wf: this.waterFrame, wh: this.whirl, ms: this.mason, ob: this.objective(),
-        pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid), p.away ? 1 : 0]),
+        pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid), p.away ? 1 : 0, p.kills || 0, p.caps || 0]),
+        fl: this.flags.map(f => [f.x, f.y, f.carrier, f.home ? 1 : 0]), cp: this.caps, wn: this.winner,
         tk: this.tanks.map(t => [t.id, t.team === 'p' ? 1 : 0, t.kind, t.pid == null ? -1 : t.pid, q(t.x), q(t.y), t.dir, t.hp, t.max,
           t.anim & 255, t.shield > 0 ? 1 : 0, t.flash, t.bonus ? 1 : 0, t.stun, t.sink, t.moving ? 1 : 0]),
         bu: this.bullets.map(b => [b.id, q(b.x), q(b.y), b.dir, b.team === 'p' ? 1 : 0, b.age]),
@@ -1190,6 +1309,9 @@
       this.remote = true;
       this.t = s.t; this.state = s.st; this.score = s.sc; this.whirl = s.wh; this.mason = s.ms; this.remoteObjective = s.ob;
       this.timer = s.tm[0]; this.timerMax = s.tm[1];
+      if (Array.isArray(s.fl)) s.fl.forEach((a, i) => { const f = this.flags[i]; if (f) { f.x = a[0]; f.y = a[1]; f.carrier = a[2]; f.home = !!a[3]; } });
+      if (s.cp) this.caps = s.cp;
+      this.winner = s.wn || null;
       if (s.wf !== this.waterFrame) { this.waterFrame = s.wf; for (const i of this.animCells) this.paintCell(i % NC, Math.floor(i / NC)); }
       for (let i = 0; i + 1 < s.ce.length; i += 2) {
         const idx = s.ce[i];
@@ -1200,7 +1322,7 @@
       s.pl.forEach((a, i) => {
         const p = this.players[i];
         if (!p) return;
-        p.lives = a[0]; p.level = a[1]; p.coffee = a[2]; p.falcons = a[3]; p.away = !!a[4]; p.tank = null;
+        p.lives = a[0]; p.level = a[1]; p.coffee = a[2]; p.falcons = a[3]; p.away = !!a[4]; p.kills = a[5] || 0; p.caps = a[6] || 0; p.tank = null;
       });
       const before = id => prev && prev.get(id);
       const moved = (o, x, y, id) => {
@@ -1264,6 +1386,13 @@
         if (sk.steal) { g.fillStyle = '#D2412E'; g.fillRect(sk.x + 2, sk.y - 3, Math.round(12 * sk.steal / 50), 2); }
       }
       for (const m of this.mines) g.drawImage(fx.mine[m.t < 40 || (this.t >> 3) & 1 ? 1 : 0], m.x, m.y);
+      BASES.forEach((b, team) => {
+        if (this.duel !== 'flag') return;
+        g.fillStyle = team ? 'rgba(74,155,224,0.28)' : 'rgba(63,179,106,0.28)';
+        g.fillRect(b.x, b.y, 16, 16);
+        g.strokeStyle = team ? '#4A9BE0' : '#3FB36A'; g.lineWidth = 1;
+        g.strokeRect(b.x + 0.5, b.y + 0.5, 15, 15);
+      });
       for (const s of this.shells) this.drawMarker(g, s);
       for (const d of this.dhows) g.drawImage(fx.dhow, d.x, d.y + Math.round(Math.sin(this.t / 40 + d.y) * 1.2));
       if (this.well) g.drawImage(fx.well[this.well.dead ? 2 : this.well.hp <= this.well.max / 2 ? 1 : 0], this.well.x, this.well.y);
@@ -1283,6 +1412,10 @@
         g.drawImage(img, Math.round(c.x), Math.round(c.y));
       }
       for (const t of this.tanks) this.drawTank(g, t);
+      for (const f of this.flags) {
+        const frame = (this.t >> 4) & 1, carried = f.carrier >= 0;
+        g.drawImage(fx.flags[f.team][frame], Math.round(f.x) + (carried ? 6 : 0), Math.round(f.y) - (carried ? 9 : 0));
+      }
       for (const b of this.bullets) {
         const x = Math.round(b.x), y = Math.round(b.y);
         g.fillStyle = '#1B140C';
@@ -1459,5 +1592,5 @@
   }
 
   TB.Game = Game;
-  TB.consts = { FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS, PALETTES };
+  TB.consts = { BASES, CAPS_TO_WIN, FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS, PALETTES };
 })();
