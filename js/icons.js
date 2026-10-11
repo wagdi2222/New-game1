@@ -279,6 +279,35 @@
     `<g transform="translate(10 5)"><rect x="-3" y="-3" width="6" height="6" fill="#F2B134"/><rect x="-3" y="-3" width="6" height="6" fill="#F2B134" transform="rotate(45)"/><circle r="1.5" fill="#0F5E63"/></g>` +
     `<path d="M0 5L1.6 3.4L3.2 5L1.6 6.6ZM16.8 5L18.4 3.4L20 5L18.4 6.6Z" fill="#35C2B6"/>`, '', '0 0 20 10');
 
+  // ---------- military ranks: chevrons, then stars, then crossed swords, then the falcon ----------
+  const GOLD = lin('gold', [[0, '#FFE08A'], [0.5, '#E2AE3C'], [1, '#A8761A']], 0.3, 1);
+  const chevron = y => `<path d="M12 ${y + 11}L32 ${y}L52 ${y + 11}" stroke="${INK}" stroke-width="10" fill="none" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<path d="M12 ${y + 11}L32 ${y}L52 ${y + 11}" stroke="url(#gold)" stroke-width="6" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const bar = y => `<rect x="13" y="${y}" width="38" height="7" rx="3.5" fill="url(#gold)" ${O}/>`;
+  const star5 = (cx, cy, r) => {
+    let d = '';
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? r * 0.45 : r; d += (i ? 'L' : 'M') + (cx + Math.cos(a) * k).toFixed(1) + ' ' + (cy + Math.sin(a) * k).toFixed(1); }
+    return `<path d="${d}Z" fill="url(#gold)" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/>`;
+  };
+  const swords = `<g stroke="${INK}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">` +
+    `<path d="M14 56L44 22L48 18L50 20L46 24L16 58Z" fill="#DDE3EA"/><path d="M50 56L20 22L16 18L14 20L18 24L48 58Z" fill="#DDE3EA"/>` +
+    `<path d="M20 44L28 52M44 44L36 52" stroke-width="5"/><path d="M20 44L28 52M44 44L36 52" stroke="url(#gold)" stroke-width="2.4"/></g>`;
+  const RANK_ART = [
+    () => chevron(26), () => chevron(18) + chevron(32), () => chevron(12) + chevron(25) + chevron(38),
+    () => chevron(8) + chevron(20) + chevron(32) + bar(48), () => chevron(4) + chevron(15) + chevron(26) + bar(41) + bar(51),
+    () => star5(32, 33, 18), () => star5(19, 34, 13) + star5(45, 34, 13), () => star5(32, 20, 12) + star5(18, 44, 12) + star5(46, 44, 12),
+    () => swords, () => swords + star5(32, 13, 10), () => swords + star5(21, 13, 9) + star5(43, 13, 9),
+    () => swords + star5(32, 9, 8) + star5(17, 15, 7) + star5(47, 15, 7),
+    () => swords + `<path d="M18 22L22 6L28 15L32 4L36 15L42 6L46 22Z" fill="url(#gold)" ${O}/>`,
+    () => `<circle cx="32" cy="32" r="28" fill="none" stroke="url(#gold)" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="none" stroke="${INK}" stroke-width="1.6"/>` +
+      `<g transform="translate(9 8) scale(.72)">${ICONS.falcon().replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</g>`,
+  ];
+  const rankIcon = i => svg(RANK_ART[Math.max(0, Math.min(RANK_ART.length - 1, i))](), GOLD + lin('wg', [[0, '#5A3D24'], [1, '#9C7248']]) + lin('wg2', [[0, '#9C7248'], [1, '#5A3D24']]));
+
+  // a silver-gold dirham for the daily gift
+  const coin = () => svg(`<circle cx="32" cy="32" r="25" fill="url(#gold)" ${O}/><circle cx="32" cy="32" r="18.5" fill="none" stroke="#A8761A" stroke-width="2"/>` +
+    `<path d="M26 24Q38 22 38 32Q38 41 26 40" stroke="#7A5310" stroke-width="4.2" fill="none" stroke-linecap="round"/><path d="M22 20Q26 14 34 15" stroke="#FFF3C4" stroke-width="2.6" fill="none" stroke-linecap="round"/>`, GOLD);
+
   // ---------- engine upgrade: a tank speeding up ----------
   const engine = () => svg(`<g transform="translate(66 6) rotate(90) scale(.82)">${VEHICLE.A(PALS.p1)}</g>` +
     `<g stroke="#F2B134" stroke-width="3.2" stroke-linecap="round"><path d="M3 24H13M1 32H11M3 40H13"/></g>`, hullDefs(PALS.p1));
@@ -295,6 +324,8 @@
       else if (name === 'commander') s = commander();
       else if (name === 'zellige') s = zellige();
       else if (name === 'engine') s = engine();
+      else if (name === 'coin') s = coin();
+      else if (name.startsWith('rank:')) s = rankIcon(+name.slice(5));
       else throw new Error('no icon ' + name);
       urls.set(name, toURL(s));
     }

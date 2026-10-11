@@ -18,11 +18,18 @@
     get(k, d) { try { const v = localStorage.getItem('waha.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('waha.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
   };
-  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '', move: 'pad', tiltSens: 'mid' }, store.get('settings', {}));
-  const save = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {} }, store.get('save', {}));
-  save.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, save.upg);
-  save.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, save.stats);
+  const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '', move: 'pad', tiltSens: 'mid', autofire: false }, store.get('settings', {}));
+  // A save from any version, or one brought from another phone, filled out with everything it lacks
+  function fillSave(s) {
+    s = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {}, xp: 0, gift: {} }, s);
+    s.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, s.upg);
+    s.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, s.stats);
+    return s;
+  }
+  const save = fillSave(store.get('save', {}));
   const persist = () => store.set('save', save);
+  const P = TB.progress;
+  const myRank = () => P.rankOf(save.xp);
   const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
 
   const AR = '٠١٢٣٤٥٦٧٨٩';
@@ -81,7 +88,7 @@
 
   // ---------- screens ----------
   const SCREENS = ['menu', 'online', 'journey', 'souq', 'medals', 'help', 'play', 'editor'];
-  const OVERLAYS = ['settings', 'briefing', 'pause', 'result', 'over', 'codebox'];
+  const OVERLAYS = ['settings', 'briefing', 'pause', 'result', 'over', 'codebox', 'gift', 'cardbox'];
   let screen = 'menu', paused = false, run = null, curtainTimer = 0, playersWanted = 1, musicKey = '', myPid = 0, names = null, onlinePick = false;
   const PLAYER_COLORS = ['#5BD17A', '#6FB3F2', '#B994F0', '#F5A253'];
 
@@ -90,7 +97,7 @@
     const was = screen;
     screen = name;
     if (name !== 'play') { TB.audio.engine('off'); if (was === 'play') holdOrientation(false); }
-    if (name === 'menu') refreshMenu();
+    if (name === 'menu') { refreshMenu(); setTimeout(offerGift, 700); }
     if (name === 'play' || name === 'editor') layout();
     if (name !== 'play') musicFor('menu');
     if (!isApp && name !== 'menu' && !(history.state && history.state.tb)) history.pushState({ tb: 1 }, '');
@@ -157,6 +164,10 @@
     $('m-coins').textContent = fmt(save.dirhams);
     $('m-stars').textContent = fmt(totalStars());
     $('b-journey-label').textContent = save.unlocked > 1 ? 'أكمل الرحلة' : 'ابدأ الرحلة';
+    const rank = myRank();
+    $('m-rank-ico').src = V('rank:' + rank.index);
+    $('m-rank-name').textContent = rank.name;
+    $('m-xp').style.width = Math.round(rank.progress * 100) + '%';
     const n = 1 + Math.floor(Math.random() * L.count);
     preview.preview(L.get(n));
     const ctx = $('menu-bg').getContext('2d');
@@ -173,6 +184,38 @@
   $('b-editor').onclick = () => show('editor');
   for (const b of document.querySelectorAll('[data-back]')) b.onclick = () => (screen === 'journey' && onlinePick ? NET.open() : goMenu());
   $('b-online').onclick = () => { TB.audio.init(); NET.open(); };
+  $('b-share').onclick = () => TB.share.game(
+    () => gtoast(ICON.players[0], 'نُسخت رسالة اللعبة', 'ألصقها في واتساب وأرسلها لأصدقائك'),
+    text => codeDialog('شارك اللعبة', 'انسخ هذه الرسالة وأرسلها لأصدقائك:', text, null));
+
+  // ---------- the daily gift ----------
+  let gift = null;
+  function offerGift() {
+    if (screen !== 'menu' || NET.active || OVERLAYS.some(open)) return;
+    gift = P.giftDue(save);
+    if (!gift) return;
+    const box = $('g-days');
+    box.textContent = '';
+    P.GIFTS.forEach((coins, i) => {
+      const d = el('div', 'day' + (i < gift.day ? ' done' : i === gift.day ? ' today' : ''));
+      d.append(el('span', null, 'اليوم ' + fmt(i + 1)), img(i === 6 ? ICON.falcon : V('coin')), el('b', null, fmt(coins)));
+      box.append(d);
+    });
+    $('g-say').textContent = gift.streak > 1 ? 'عدت ' + fmt(gift.streak) + ' أيام متتالية! كلما واصلت كبرت هديتك.' : 'مرحباً بك يا حارس! عُد كل يوم لتكبر هديتك.';
+    $('g-take').textContent = 'استلم ' + fmt(gift.coins) + ' درهم' + (gift.falcon ? ' وصقراً' : '');
+    $('gift').hidden = false;
+  }
+  function takeGift() {
+    if (!gift) return;
+    P.takeGift(save, gift);
+    gift = null;
+    persist();
+    $('gift').hidden = true;
+    TB.audio.init(); TB.audio.play('coin');
+    refreshMenu();
+  }
+  $('g-take').onclick = takeGift;
+  $('gift').addEventListener('click', e => { if (e.target === $('gift')) takeGift(); });
 
   // ---------- install ----------
   let installPrompt = null;
@@ -300,7 +343,7 @@
 
   // ---------- settings ----------
   const SEGS = [['s-diff', 'difficulty'], ['s-pad', 'pad'], ['s-digits', 'digits'], ['s-move', 'move'], ['s-tiltsens', 'tiltSens']];
-  const TOGGLES = [['s-sound', 'sound'], ['s-music', 'music'], ['s-engine', 'engine'], ['s-vibrate', 'vibrate'], ['s-lefty', 'lefty'], ['s-full', 'full']];
+  const TOGGLES = [['s-sound', 'sound'], ['s-music', 'music'], ['s-engine', 'engine'], ['s-vibrate', 'vibrate'], ['s-lefty', 'lefty'], ['s-full', 'full'], ['s-auto', 'autofire']];
   function renderSettings() {
     for (const [id, key] of SEGS) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v === settings[key]));
     for (const [id, key] of TOGGLES) $(id).setAttribute('aria-pressed', String(!!settings[key]));
@@ -350,6 +393,23 @@
     };
   }
   document.querySelector('#settings [data-close]').onclick = closeSettings;
+  // Carrying progress to another phone with a code
+  $('s-export').onclick = async () => {
+    const code = await P.exportCode(save);
+    codeDialog('رمز تقدّمك', 'انسخ هذا الرمز، ثم افتح اللعبة في الجوال الآخر واختر «أدخل رمزاً» من الإعدادات:', code, null);
+  };
+  $('s-import').onclick = () => codeDialog('أدخل رمز التقدّم', 'الصق الرمز هنا. سيحلّ محل التقدّم المحفوظ في هذا الجوال.', '', async text => {
+    const data = await P.importCode(text);
+    if (!data) { gtoast(ICON.foe, 'رمز غير صحيح', 'تأكد أنك نسخت الرمز كاملاً'); return false; }
+    const fresh = fillSave(data);
+    for (const k of Object.keys(save)) delete save[k];
+    Object.assign(save, fresh);
+    persist();
+    refreshMenu();
+    gtoast(myTankIcon(), 'انتقل تقدّمك!', fmt(totalStars()) + ' نجمة و' + fmt(save.dirhams) + ' درهم · ' + myRank().name);
+    TB.audio.play('medal');
+    return true;
+  });
   $('settings').addEventListener('click', e => { if (e.target === $('settings')) closeSettings(); });
 
   // ---------- help ----------
@@ -600,6 +660,11 @@
   }
 
   function bank(r) {
+    const before = myRank();
+    r.xpGained = P.xpFor(r);
+    save.xp += r.xpGained;
+    const after = myRank();
+    r.promoted = after.index > before.index ? after : null;
     save.dirhams += r.coins;
     save.stats.kills += (r.stats.kills || []).reduce((a, b) => a + b, 0);
     save.stats.towers += r.stats.towers;
@@ -623,6 +688,10 @@
     bank(r);
     persist();
     const fresh = checkMedals(r);
+    r.freshMedals = fresh;
+    lastResult = r;
+    showXP('r-xp', r, fresh.length);
+    $('r-share').hidden = !!r.duel;
     $('r-title').textContent = n === L.count && mode === 'campaign' ? 'اكتملت الرحلة! أنت بطل الواحة' : 'انتصار!';
     const perfect = r.mission === 'escort' ? 'القافلة كاملة' : r.mission === 'collect' ? 'كل القِرَب' : 'البئر سليم';
     const noLoss = r.stats.deaths === 0, mastered = r.stars - 1 - (noLoss ? 1 : 0) > 0;
@@ -646,6 +715,53 @@
     $('result').hidden = false;
     for (let i = 0; i < r.stars; i++) { await wait(320); stars[i].classList.add('on'); TB.audio.play('coin'); }
   }
+  // Experience from the battle, the rank bar, and a word when it brings a promotion
+  let lastResult = null;
+  function showXP(id, r, medals) {
+    const box = $(id);
+    box.textContent = '';
+    if (!r.xpGained) return;
+    const rank = myRank(), bar = el('div', 'bar'), fill = el('i');
+    bar.append(fill);
+    box.append(img(V('rank:' + rank.index)), el('span', null, '+' + fmt(r.xpGained) + ' خبرة'), bar);
+    fill.style.width = '0%';
+    setTimeout(() => { fill.style.width = Math.round(rank.progress * 100) + '%'; }, 60);
+    if (r.promoted) {
+      setTimeout(() => {
+        gtoast(V('rank:' + r.promoted.index), 'ترقية! أنت الآن ' + r.promoted.name, 'واصل القتال لتبلغ رتبة أعلى', true);
+        TB.audio.play('medal');
+      }, 700 + (medals || 0) * 2600);
+    }
+  }
+  const myTankIcon = () => ICON.players[0];
+  function stageLabel(st, mode) {
+    return mode === 'daily' ? 'تحدي اليوم' : mode === 'custom' ? 'خريطتي' : mode === 'endless' ? 'الساحة ' + fmt(st.n - L.count) : 'المرحلة ' + fmt(st.n) + ': ' + st.name;
+  }
+  $('r-share').onclick = async () => {
+    const r = lastResult;
+    if (!r) return;
+    const st = r.stage, rank = myRank();
+    const canvas = await TB.share.card({
+      title: 'انتصار!', sub: stageLabel(st, run.mode), stars: r.stars, score: fmt(r.score) + ' نقطة',
+      extra: L.REGIONS[st.region].name + ' · ' + L.MISSIONS[st.mission].name + (r.online ? ' · مع أصدقائي' : ''),
+      name: settings.name || 'حارس', rank: rank.name, rankIcon: V('rank:' + rank.index), tankIcon: myTankIcon(),
+      medals: (r.freshMedals || []).map(m => m.icon),
+    });
+    showCard(canvas, 'انتصرت في «حُرّاس الواحة»! العبها معي: ' + TB.share.SITE);
+  };
+  function showCard(canvas, text) {
+    const url = canvas.toDataURL('image/png');
+    $('card-img').src = url;
+    $('card-save').href = url;
+    $('card-save').hidden = isApp;
+    $('card-share').hidden = !isApp && typeof navigator.canShare !== 'function';
+    $('card-share').onclick = async () => {
+      if (!(await TB.share.image(canvas, text))) gtoast(ICON.star, 'احفظ الصورة', 'ثم أرسلها لأصدقائك من معرض الصور');
+    };
+    $('cardbox').hidden = false;
+  }
+  $('card-close').onclick = () => { $('cardbox').hidden = true; };
+
   const backFromBattle = () => {
     if (guest()) NET.leave(false);
     else if (hosting()) goJourney();
@@ -663,7 +779,7 @@
     TB.audio.play('over');
     bank(r);
     persist();
-    checkMedals(r);
+    showXP('o-xp', r, checkMedals(r).length);
     $('o-reason').textContent = { well: 'سقط البئر في يد العقارب.', lives: NET.active ? 'نفدت دباباتكم.' : 'نفدت دباباتك.', camels: 'لم تصل القافلة.', skins: 'سرق العقارب القِرَب.' }[r.reason] || '';
     $('o-score').textContent = fmt(r.score);
     const earned = $('o-earned');
@@ -1032,7 +1148,32 @@
     const k = pad && pad.querySelector('.knob');
     if (k) k.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
   }
-  const fireOf = i => { const st = inputs[i]; return st.fires.size > 0 || st.keyFire || st.gpFire; };
+  const fireOf = i => {
+    const st = inputs[i];
+    if (st.fires.size > 0 || st.keyFire || st.gpFire) return true;
+    return settings.autofire && autoAim(localDuo() ? i : myPid);
+  };
+  // Auto-fire: shoot when a foe stands in line ahead and nothing of ours (walls, the well) is in the way
+  function autoAim(pid) {
+    const pl = game.players[pid], t = pl && pl.tank;
+    if (!t || game.state !== 'play') return false;
+    const C = TB.consts, d = t.dir, cx = t.x + 8, cy = t.y + 8, reach = 150;
+    const inLane = (x, y, w, h) => {
+      const ox = x + w / 2, oy = y + h / 2;
+      if (d & 1) return Math.abs(oy - cy) < h / 2 + 3 && (d === 1 ? ox > cx : ox < cx) && Math.abs(ox - cx) < reach;
+      return Math.abs(ox - cx) < w / 2 + 3 && (d === 2 ? oy > cy : oy < cy) && Math.abs(oy - cy) < reach;
+    };
+    const clear = (x, y, w, h) => {
+      const ox = x + w / 2, oy = y + h / 2;
+      const rx = d & 1 ? Math.min(cx, ox) : cx - 2, ry = d & 1 ? cy - 2 : Math.min(cy, oy);
+      const rw = d & 1 ? Math.abs(ox - cx) - w / 2 : 4, rh = d & 1 ? 4 : Math.abs(oy - cy) - h / 2;
+      if (game.cellsIn(rx, ry, Math.max(1, rw), Math.max(1, rh), c => c === C.MUD || c === C.STONE)) return false;
+      return !(game.well && !game.well.dead && inLane(game.well.x, game.well.y, 16, 16) && Math.abs(game.well.x + 8 - cx) + Math.abs(game.well.y + 8 - cy) < Math.abs(ox - cx) + Math.abs(oy - cy));
+    };
+    for (const o of game.tanks) if (!o.dead && game.isFoe(t, o) && inLane(o.x, o.y, o.size, o.size) && clear(o.x, o.y, o.size, o.size)) return true;
+    for (const tw of game.towers) if (!tw.dead && inLane(tw.x, tw.y, 16, 16) && clear(tw.x, tw.y, 16, 16)) return true;
+    return false;
+  }
   const inside = (elm, e, slack) => { const r = elm.getBoundingClientRect(); return e.clientX >= r.left - slack && e.clientX <= r.right + slack && e.clientY >= r.top - slack && e.clientY <= r.bottom + slack; };
 
   function zoneDown(zone, e) {
@@ -1334,12 +1475,8 @@
     $('codebox').hidden = false;
     if (!action) setTimeout(() => $('cb-text').select(), 50);
   }
-  $('cb-ok').onclick = () => {
-    if (codeAction) {
-      const rows = L.decodeMap($('cb-text').value);
-      if (!rows) { gtoast(ICON.tower, 'رمز غير صحيح', 'تأكد أنك نسخت الرمز كاملاً'); return; }
-      codeAction(rows);
-    }
+  $('cb-ok').onclick = async () => {
+    if (codeAction && (await codeAction($('cb-text').value)) === false) return;
     $('codebox').hidden = true;
   };
   $('cb-cancel').onclick = () => { $('codebox').hidden = true; };
@@ -1351,7 +1488,9 @@
     try { await navigator.clipboard.writeText(link); gtoast(ICON.pu.mason, 'نُسخ رابط الخريطة', 'أرسله لأصدقائك ليفتحوها'); return; } catch (e) { /* fall through */ }
     codeDialog('رابط خريطتك', 'انسخ الرابط وأرسله لأصدقائك:', link, null);
   };
-  $('e-import').onclick = () => codeDialog('افتح خريطة', 'الصق رابط الخريطة أو رمزها هنا:', '', rows => {
+  $('e-import').onclick = () => codeDialog('افتح خريطة', 'الصق رابط الخريطة أو رمزها هنا:', '', text => {
+    const rows = L.decodeMap(text);
+    if (!rows) { gtoast(ICON.tower, 'رمز غير صحيح', 'تأكد أنك نسخت الرمز كاملاً'); return false; }
     edMap = rows; store.set('custom', edMap); drawEditor();
     gtoast(ICON.pu.mason, 'فُتحت الخريطة', 'جرّبها أو عدّل عليها');
   });

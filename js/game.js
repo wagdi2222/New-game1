@@ -273,6 +273,9 @@
       this.spawns.push({ team: 'p', pid: pl.pid, x: sp.x, y: sp.y, t: 36 });
     }
 
+    // Whether vehicle b is an enemy of vehicle a
+    isFoe(a, b) { return a !== b && a.team !== b.team; }
+
     tankBlocked(t, x, y) {
       const s = t.size;
       if (x < 0 || y < 0 || x > FIELD - s || y > FIELD - s) return true;

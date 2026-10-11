@@ -37,6 +37,7 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
   padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 .overlay{position:fixed;inset:0;z-index:20;display:flex;background:rgba(6,10,20,.78);padding:16px;overflow-y:auto;touch-action:pan-y}
 #settings{z-index:21}
+#codebox{z-index:22}
 .overlay>.card{margin:auto}
 .card{position:relative;width:min(460px,100%);background:linear-gradient(180deg,var(--indigo-2),var(--indigo));border:1px solid rgba(242,177,52,.35);
   border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden}
@@ -263,6 +264,22 @@ kbd{direction:ltr;display:inline-block;background:rgba(0,0,0,.3);border:1px soli
 .result-stars{display:flex;justify-content:center;gap:10px}
 .result-stars .star{width:46px;height:46px;transform:scale(.4);opacity:.3;transition:transform .35s cubic-bezier(.3,1.6,.5,1),opacity .2s}
 .result-stars .star.on{transform:scale(1);opacity:1}
+.xp{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;color:var(--sand)}
+.xp:empty{display:none}
+.xp img{width:34px;height:34px}
+.xp .bar{width:120px;height:8px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden}
+.xp .bar i{display:block;height:100%;background:var(--gold);transition:width .9s ease-out}
+.pill.rank img{width:20px;height:20px}
+.xpbar{display:inline-block;width:40px;height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+.xpbar i{display:block;height:100%;background:var(--gold)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.day{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:10px;padding:6px 1px;text-align:center;font-size:.7rem;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted)}
+.day img{width:26px;height:26px}
+.day b{color:var(--cream);font-size:.78rem}
+.day.today{border-color:var(--gold);background:rgba(242,177,52,.14);box-shadow:0 0 0 2px rgba(242,177,52,.3)}
+.day.done{opacity:.4}
+#card-img{width:min(340px,72vw);border-radius:14px;align-self:center;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.btn.small{padding:6px 10px;font-size:.85rem;min-height:36px;border-radius:10px}
 .big-num{font-size:2.1rem;font-weight:900;text-align:center;font-variant-numeric:tabular-nums;color:var(--gold)}
 .earned{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
 .newmedals{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
@@ -331,7 +348,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <div class="logo">
       <canvas id="logo" aria-label="حُرّاس الواحة"></canvas>
       <div class="sub">احمِ بئر الواحة من عصابة العقارب</div>
-      <div class="purse"><span class="pill"><i class="coin"></i><b id="m-coins">٠</b> درهم</span><span class="pill"><i class="star"></i><b id="m-stars">٠</b></span></div>
+      <div class="purse"><span class="pill"><i class="coin"></i><b id="m-coins">٠</b> درهم</span><span class="pill"><i class="star"></i><b id="m-stars">٠</b></span><span class="pill rank" id="m-rank"><img id="m-rank-ico" alt=""><b id="m-rank-name"></b><i class="xpbar"><i id="m-xp"></i></i></span></div>
     </div>
     <div class="menu-btns">
       <button class="btn" id="b-journey"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg><span id="b-journey-label">ابدأ الرحلة</span></button>
@@ -348,7 +365,10 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
         <button class="btn ghost" id="b-editor">صمّم خريطتك</button>
         <button class="btn ghost" id="b-help">طريقة اللعب</button>
       </div>
-      <button class="btn ghost" id="b-settings">الإعدادات</button>
+      <div class="duo">
+        <button class="btn ghost" id="b-settings">الإعدادات</button>
+        <button class="btn ghost" id="b-share">شارك اللعبة</button>
+      </div>
       <button class="btn ghost" id="b-install" hidden>ثبّت اللعبة على الجوال</button>
       <a class="btn ghost" id="b-apk" hidden>تحميل نسخة أندرويد (APK)</a>
       <div class="install-note" id="install-note" hidden>على أندرويد: من قائمة ⋮ في Chrome اختر «تثبيت التطبيق» لتلعب بملء الشاشة وبدون إنترنت.</div>
@@ -448,6 +468,8 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <div class="set-row"><label>حجم أزرار التحكم</label>
       <div class="seg" id="s-pad"><button data-v="s">صغير</button><button data-v="m">متوسط</button><button data-v="l">كبير</button></div></div>
     <div class="set-row"><label>زر النار على اليسار<small>لمن يستخدم اليد اليسرى</small></label><button class="toggle" id="s-lefty" aria-label="زر النار على اليسار"></button></div>
+    <div class="set-row"><label>إطلاق تلقائي<small>يطلق مدفعك وحده حين يكون عدو أمامك</small></label><button class="toggle" id="s-auto" aria-label="إطلاق تلقائي"></button></div>
+    <div class="set-row"><label>نقل التقدّم<small>انقل نجومك ودراهمك إلى جوال آخر</small></label><div class="row"><button class="btn ghost small" id="s-export">انسخ رمزي</button><button class="btn ghost small" id="s-import">أدخل رمزاً</button></div></div>
     <div class="set-row"><label>ملء الشاشة عند اللعب</label><button class="toggle" id="s-full" aria-label="ملء الشاشة"></button></div>
     <button class="btn" data-close>تم</button>
   </div>
@@ -531,6 +553,8 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <div class="big-num" id="r-score">٠</div>
     <div class="earned" id="r-earned"></div>
     <div class="newmedals" id="r-medals"></div>
+    <div class="xp" id="r-xp"></div>
+    <button class="btn wa" id="r-share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>شارك انتصارك</button>
     <button class="btn" id="r-next">المرحلة التالية</button>
     <div class="row"><button class="btn ghost" id="r-retry">أعد المرحلة</button><button class="btn ghost" id="r-map">الرحلة</button></div>
   </div>
@@ -543,6 +567,7 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
     <p id="o-reason"></p>
     <div class="big-num" id="o-score">٠</div>
     <div class="earned" id="o-earned"></div>
+    <div class="xp" id="o-xp"></div>
     <p id="o-tip"></p>
     <button class="btn" id="o-retry">حاول مجدداً</button>
     <div class="row"><button class="btn ghost" id="o-souq">السوق</button><button class="btn ghost" id="o-map">الرحلة</button></div>
@@ -550,6 +575,24 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 </section>
 
 <!-- map code dialog -->
+<section id="gift" class="overlay" hidden>
+  <div class="card">
+    <h2>هدية اليوم</h2>
+    <p id="g-say">مرحباً بعودتك يا حارس! هذه هديتك لهذا اليوم.</p>
+    <div class="days" id="g-days"></div>
+    <button class="btn" id="g-take">استلم الهدية</button>
+  </div>
+</section>
+
+<section id="cardbox" class="overlay" hidden>
+  <div class="card">
+    <h2>بطاقة انتصارك</h2>
+    <img id="card-img" alt="بطاقة الانتصار">
+    <div class="row"><button class="btn wa" id="card-share">شارك الصورة</button><a class="btn ghost" id="card-save" download="waha.png">احفظ الصورة</a></div>
+    <button class="btn ghost" id="card-close">إغلاق</button>
+  </div>
+</section>
+
 <section id="codebox" class="overlay" hidden>
   <div class="card">
     <h2 id="cb-title">رمز الخريطة</h2>
@@ -578,6 +621,8 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
 <script src="js/levels.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/icons.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/share.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
 <script src="js/net.js"></script>

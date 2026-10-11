@@ -3,11 +3,13 @@ package io.github.wagdi2222.tankbattle;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Base64;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -18,6 +20,10 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 /** Full-screen WebView that runs the bundled web game from assets/www. */
 public class MainActivity extends Activity {
@@ -126,6 +132,34 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> setRequestedOrientation(hold
                     ? ActivityInfo.SCREEN_ORIENTATION_LOCKED
                     : ActivityInfo.SCREEN_ORIENTATION_FULL_USER));
+        }
+
+        // Shares a picture made by the game (a victory card) with a line of text
+        @JavascriptInterface
+        public void shareImage(String base64Png, String text) {
+            try {
+                byte[] png = Base64.decode(base64Png, Base64.DEFAULT);
+                File f = new File(ShareProvider.folder(MainActivity.this), "waha-card.png");
+                try (FileOutputStream out = new FileOutputStream(f)) {
+                    out.write(png);
+                }
+                Uri uri = Uri.parse("content://" + ShareProvider.AUTHORITY + "/waha-card.png");
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("image/png");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.putExtra(Intent.EXTRA_TEXT, text);
+                send.setClipData(ClipData.newRawUri("", uri));
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                runOnUiThread(() -> {
+                    try {
+                        startActivity(Intent.createChooser(send, null));
+                    } catch (ActivityNotFoundException e) {
+                        // nothing can take a picture
+                    }
+                });
+            } catch (IOException | IllegalArgumentException e) {
+                // the picture could not be saved: nothing to share
+            }
         }
 
         // Opens Android's share sheet (WhatsApp, Telegram, SMS...) with the room invitation

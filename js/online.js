@@ -53,7 +53,7 @@
       const code = await TB.net.host({ onOpen: () => {}, onData: hostData, onClose: hostClose });
       if (my !== O.attempt) { TB.net.close(); return; }
       Object.assign(O, { active: true, role: 'host', code, me: 0, inGame: false, hostPaused: false });
-      O.players = [{ name, upg: Object.assign({}, u.save.upg), falcons: u.save.falcons, conn: null, ping: 0, gamePid: 0 }];
+      O.players = [{ name, upg: Object.assign({}, u.save.upg), falcons: u.save.falcons, conn: null, ping: 0, gamePid: 0, rank: TB.progress.rankOf(u.save.xp || 0).index }];
       renderRoom();
       view('room');
     } catch (e) {
@@ -62,7 +62,7 @@
   }
 
   function lobbyList() {
-    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null }));
+    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null, rank: p.rank || 0 }));
   }
   function broadcast(msg, onlyPlaying) {
     for (const p of O.players) if (p.conn && (!onlyPlaying || p.gamePid != null)) send(p.conn, msg);
@@ -83,7 +83,7 @@
         if (O.players.length >= MAX) { send(conn, { t: 'full' }); return; }
         const upg = d.upg || {};
         O.players.push({
-          name: cleanName(d.name), conn, ping: 0, seen: performance.now(), gamePid: null, falcons: clamp(d.falcons, 0, 3, 0),
+          name: cleanName(d.name), conn, ping: 0, seen: performance.now(), gamePid: null, falcons: clamp(d.falcons, 0, 3, 0), rank: clamp(d.rank, 0, 13, 0),
           upg: { armor: clamp(upg.armor, 0, 3, 0), cannon: clamp(upg.cannon, 0, 2, 0), engine: clamp(upg.engine, 0, 3, 0) },
         });
         send(conn, { t: 'welcome', code: O.code });
@@ -207,7 +207,7 @@
       const conn = await TB.net.join(code, { onOpen: () => {}, onData: clientData, onClose: clientClose });
       if (my !== O.attempt) { TB.net.close(); return; }
       Object.assign(O, { active: true, role: 'client', code, conn, me: 0, inGame: false, hostPaused: false, players: [], welcomed: false, heard: performance.now() });
-      send(conn, { t: 'hello', v: VERSION, name, upg: u.save.upg, falcons: u.save.falcons });
+      send(conn, { t: 'hello', v: VERSION, name, upg: u.save.upg, falcons: u.save.falcons, rank: TB.progress.rankOf(u.save.xp || 0).index });
       O.welcomeTimer = setTimeout(() => { if (!O.welcomed && my === O.attempt) { leave(true); fail('المضيف لم يرد. اطلب منه أن يفتح اللعبة ثم حاول مجدداً.'); } }, 20000);
     } catch (e) {
       if (my !== O.attempt) return;
@@ -367,7 +367,8 @@
       const b = document.createElement('b');
       b.textContent = p ? p.name + ((host && i === 0) || (!host && i === O.slot) ? ' (أنت)' : '') : 'بانتظار لاعب…';
       const small = document.createElement('small');
-      small.textContent = !p ? 'ادعُ صديقاً بالرابط' : p.host ? 'المضيف' : p.ping ? 'الاتصال ' + u.fmt(p.ping) + ' م.ث' : 'متصل';
+      const rank = p ? TB.progress.RANKS[clamp(p.rank, 0, 13, 0)][1] + ' · ' : '';
+      small.textContent = !p ? 'ادعُ صديقاً بالرابط' : rank + (p.host ? 'المضيف' : p.ping ? 'الاتصال ' + u.fmt(p.ping) + ' م.ث' : 'متصل');
       text.append(b, small);
       slot.append(icon, text);
       box.append(slot);
