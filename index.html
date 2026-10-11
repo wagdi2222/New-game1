@@ -128,6 +128,13 @@ img.px,canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 }
 
 /* ---------- souq, medals, settings, help ---------- */
+.souq-h{width:min(880px,100%);margin:18px 0 8px;color:var(--gold);font-size:1.1rem}
+.skins{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:min(880px,100%)}
+.skin{display:flex;flex-direction:column;align-items:center;gap:6px;background:linear-gradient(180deg,var(--indigo-2),var(--indigo));border:1px solid var(--line);border-radius:14px;padding:10px}
+.skin.on{border-color:var(--gold);box-shadow:0 0 0 2px rgba(242,177,52,.35)}
+.skin img{width:72px;height:72px}
+.skin b{font-size:.9rem}
+.skin .btn{width:100%;min-height:38px;padding:6px 8px;font-size:.85rem;border-radius:10px}
 .shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;width:min(880px,100%)}
 .ware{display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,var(--indigo-2),var(--indigo));border:1px solid rgba(242,177,52,.3);border-radius:16px;padding:14px}
 .ware header{display:flex;gap:10px;align-items:center}
@@ -419,6 +426,8 @@ textarea.code{width:100%;min-height:90px;direction:ltr;border-radius:12px;border
   <div class="top"><h2>السوق</h2><span class="pill"><i class="coin"></i><b id="s-coins">٠</b> درهم</span><button class="back" data-back>رجوع</button></div>
   <div class="merchant"><img id="merchant-img" alt=""><div id="merchant-say">أهلاً بك في السوق يا حارس! عندنا أجود العُدّة للدفاع عن الواحة.</div></div>
   <div class="shop" id="shop"></div>
+  <h3 class="souq-h">ألوان العربة ونقوشها</h3>
+  <div class="skins" id="skins"></div>
 </section>
 
 <!-- medals -->

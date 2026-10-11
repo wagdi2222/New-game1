@@ -87,6 +87,7 @@
       this.sharedFalcons = !Array.isArray(opts.falcons);
       this.falcons = this.sharedFalcons ? opts.falcons || 0 : 0;
       this.stage = opts.stage;
+      this.paints = Array.isArray(opts.paints) ? opts.paints.slice(0, 4) : [];
       this.score = 0; this.coins = 0; this.nextId = 1; this.cellLog = [];
       this.players = [];
       for (let i = 0; i < this.nPlayers; i++) {
@@ -1278,6 +1279,12 @@
       return this.frame;
     }
 
+    // A player's colours: the souq's paint when they bought one, otherwise their seat colour
+    paletteOf(pid) {
+      const paint = this.paints && this.paints[pid];
+      return paint && S.SKINS[paint] ? 'sk_' + paint : PALETTES[pid] || 'p1';
+    }
+
     designOf(t) {
       if (t.team === 'p') return PLAYER[this.players[t.pid].level].design;
       return t.kind < 0 ? 'boss' : ENEMY[t.kind].design;
@@ -1285,7 +1292,7 @@
 
     drawTank(g, t) {
       const fx = this.fx, design = this.designOf(t);
-      let pal = t.team === 'p' ? PALETTES[t.pid] || 'p1' : 'enemy';
+      let pal = t.team === 'p' ? this.paletteOf(t.pid) : 'enemy';
       if (t.team === 'e' && t.bonus && (this.t >> 3) & 1) pal = 'bonus';
       if (t.flash > 0 && (t.flash >> 1) & 1) pal = 'hit';
       if (t.stun > 0 && (this.t >> 2) & 1) pal = 'stun';

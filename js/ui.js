@@ -21,7 +21,9 @@
   const settings = Object.assign({ difficulty: 'normal', sound: true, music: true, engine: true, vibrate: true, digits: 'arabic', pad: 'm', lefty: false, full: true, name: '', move: 'pad', tiltSens: 'mid', autofire: false }, store.get('settings', {}));
   // A save from any version, or one brought from another phone, filled out with everything it lacks
   function fillSave(s) {
-    s = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {}, xp: 0, gift: {} }, s);
+    s = Object.assign({ unlocked: 1, stars: {}, best: {}, dirhams: 0, falcons: 1, medals: {}, dailyBest: {}, xp: 0, gift: {}, skins: [], skin: '' }, s);
+    if (!Array.isArray(s.skins)) s.skins = [];
+    if (s.skin && !s.skins.includes(s.skin)) s.skin = '';
     s.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, s.upg);
     s.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, s.stats);
     return s;
@@ -477,6 +479,38 @@
       card.append(head, pips, btn);
       box.append(card);
     }
+    buildSkins();
+  }
+  // Paint for the car: buy once, then pick any you own
+  function buildSkins() {
+    const box = $('skins');
+    box.textContent = '';
+    const list = [['', { name: 'لون الحارس', price: 0 }]].concat(Object.entries(S.SKINS));
+    for (const [id, sk] of list) {
+      const owned = !id || save.skins.includes(id), chosen = (save.skin || '') === id;
+      const card = el('div', 'skin' + (chosen ? ' on' : ''));
+      card.append(img(V('vehicle:A:' + (id ? 'sk_' + id : 'p1'))), el('b', null, sk.name));
+      const btn = el('button', 'btn' + (owned && !chosen ? ' ghost' : ''));
+      if (chosen) { btn.textContent = 'على عربتك'; btn.disabled = true; }
+      else if (owned) btn.textContent = 'اختر';
+      else { btn.textContent = fmt(sk.price) + ' درهم'; btn.disabled = save.dirhams < sk.price; if (btn.disabled) btn.className = 'btn ghost'; }
+      btn.onclick = () => {
+        if (!owned) {
+          if (save.dirhams < sk.price) return;
+          save.dirhams -= sk.price;
+          save.skins.push(id);
+          save.stats.buys++;
+          $('merchant-say').textContent = 'لون يليق بحارس مثلك!';
+          TB.audio.init(); TB.audio.play('coin');
+        } else TB.audio.play('pause');
+        save.skin = id;
+        persist();
+        checkMedals(null);
+        buildSouq();
+      };
+      card.append(btn);
+      box.append(card);
+    }
   }
 
   // ---------- medals ----------
@@ -568,6 +602,7 @@
     game.start({
       stage: p.stage, difficulty: extra.difficulty || settings.difficulty, players: extra.players || playersWanted,
       upgrades: save.upg, playerUpgrades: extra.playerUpgrades, falcons: extra.falcons || save.falcons,
+      paints: extra.skins || [save.skin || ''],
     });
     game.remote = !!extra.remote;
     game.logCells = hosting();
@@ -733,7 +768,7 @@
       }, 700 + (medals || 0) * 2600);
     }
   }
-  const myTankIcon = () => ICON.players[0];
+  const myTankIcon = () => V('vehicle:A:' + (save.skin && S.SKINS[save.skin] ? 'sk_' + save.skin : 'p1'));
   function stageLabel(st, mode) {
     return mode === 'daily' ? 'تحدي اليوم' : mode === 'custom' ? 'خريطتي' : mode === 'endless' ? 'الساحة ' + fmt(st.n - L.count) : 'المرحلة ' + fmt(st.n) + ': ' + st.name;
   }
@@ -828,7 +863,7 @@
       const c = el('div', 'chip' + (NET.active && i === myPid ? ' me' : ''));
       const lives = el('b'), hp = el('div', 'hp'), lvl = el('div', 'lvl');
       for (let k = 0; k < 3; k++) lvl.append(el('i'));
-      c.append(img(ICON.players[i]));
+      c.append(img(V('vehicle:A:' + game.paletteOf(i))));
       if (names) c.append(el('span', 'nm', i === myPid ? 'أنت' : names[i] || ''));
       c.append(lives, hp, lvl);
       box.append(c);

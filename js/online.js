@@ -62,7 +62,7 @@
   }
 
   function lobbyList() {
-    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null, rank: p.rank || 0 }));
+    return O.players.map((p, i) => ({ name: p.name, ping: p.ping || 0, host: i === 0, playing: O.inGame && p.gamePid != null, rank: p.rank || 0, skin: p.skin || '' }));
   }
   function broadcast(msg, onlyPlaying) {
     for (const p of O.players) if (p.conn && (!onlyPlaying || p.gamePid != null)) send(p.conn, msg);
@@ -84,6 +84,7 @@
         const upg = d.upg || {};
         O.players.push({
           name: cleanName(d.name), conn, ping: 0, seen: performance.now(), gamePid: null, falcons: clamp(d.falcons, 0, 3, 0), rank: clamp(d.rank, 0, 13, 0),
+          skin: TB.sprites.SKINS[d.skin] ? d.skin : '',
           upg: { armor: clamp(upg.armor, 0, 3, 0), cannon: clamp(upg.cannon, 0, 2, 0), engine: clamp(upg.engine, 0, 3, 0) },
         });
         send(conn, { t: 'welcome', code: O.code });
@@ -133,14 +134,15 @@
     O.inGame = true; O.hostPaused = false; O.events = []; O.lastSent = -99;
     O.players[0].upg = Object.assign({}, u.save.upg);
     O.players[0].falcons = u.save.falcons;
+    O.players[0].skin = u.save.skin || '';
     const extra = {
       players: O.players.length, playerUpgrades: O.players.map(p => p.upg), falcons: O.players.map(p => p.falcons),
-      names: O.names, myPid: 0,
+      names: O.names, myPid: 0, skins: O.players.map(p => p.skin || ''),
     };
     u.startStage(pending, extra);
     const stage = JSON.parse(JSON.stringify(pending.stage));
     O.players.forEach((p, i) => {
-      if (p.conn) send(p.conn, { t: 'start', stage, mode: pending.mode, difficulty: u.settings.difficulty, me: i, n: extra.players, ups: extra.playerUpgrades, fal: extra.falcons, names: O.names });
+      if (p.conn) send(p.conn, { t: 'start', stage, mode: pending.mode, difficulty: u.settings.difficulty, me: i, n: extra.players, ups: extra.playerUpgrades, fal: extra.falcons, names: O.names, skins: extra.skins });
     });
   }
 
@@ -207,7 +209,7 @@
       const conn = await TB.net.join(code, { onOpen: () => {}, onData: clientData, onClose: clientClose });
       if (my !== O.attempt) { TB.net.close(); return; }
       Object.assign(O, { active: true, role: 'client', code, conn, me: 0, inGame: false, hostPaused: false, players: [], welcomed: false, heard: performance.now() });
-      send(conn, { t: 'hello', v: VERSION, name, upg: u.save.upg, falcons: u.save.falcons, rank: TB.progress.rankOf(u.save.xp || 0).index });
+      send(conn, { t: 'hello', v: VERSION, name, upg: u.save.upg, falcons: u.save.falcons, rank: TB.progress.rankOf(u.save.xp || 0).index, skin: u.save.skin || '' });
       O.welcomeTimer = setTimeout(() => { if (!O.welcomed && my === O.attempt) { leave(true); fail('المضيف لم يرد. اطلب منه أن يفتح اللعبة ثم حاول مجدداً.'); } }, 20000);
     } catch (e) {
       if (my !== O.attempt) return;
@@ -241,6 +243,7 @@
         O.snapAt = performance.now(); O.lastHp = null; O.sentInput = '';
         u.startStage({ stage: d.stage, mode: d.mode }, {
           remote: true, players: clamp(d.n, 1, 4, 1), playerUpgrades: d.ups, falcons: d.fal, names: O.names, myPid: O.me, difficulty: d.difficulty,
+          skins: (Array.isArray(d.skins) ? d.skins : []).map(k => (TB.sprites.SKINS[k] ? k : '')),
         });
         break;
       }
@@ -362,7 +365,7 @@
       slot.className = 'slot' + (p ? '' : ' empty');
       const icon = new Image();
       icon.alt = '';
-      icon.src = u.ICON.players[i];
+      icon.src = p && TB.sprites.SKINS[p.skin] ? TB.icons.url('vehicle:A:sk_' + p.skin) : u.ICON.players[i];
       const text = document.createElement('div');
       const b = document.createElement('b');
       b.textContent = p ? p.name + ((host && i === 0) || (!host && i === O.slot) ? ' (أنت)' : '') : 'بانتظار لاعب…';

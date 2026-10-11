@@ -25,12 +25,25 @@
   }
   const wheel = (x, y, w, h, p) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${p[0]}" ${O}/><path d="M${x + 2.5} ${y + h / 2}H${x + w - 2.5}" stroke="${p[1]}" stroke-width="2"/>`;
   const barrel = (x, y, w, h, p) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.2" fill="${p[2]}" ${O}/><rect x="${x - 1.5}" y="${y - 0.5}" width="${w + 3}" height="6" rx="2" fill="${p[1]}" ${O}/>`;
+  const HULL = 'M20 7H44L54 17V51L44 61H20L10 51V17Z';
+  const clipHull = body => `<clipPath id="hc"><path d="${HULL}"/></clipPath><g clip-path="url(#hc)">${body}</g>`;
+  // The patterns of the souq's colours, painted over the hull
+  const DECO = {
+    camo: p => clipHull([[18, 21, 9, 6, 0], [46, 29, 8, 5, 4], [19, 45, 7, 5, 4], [45, 53, 10, 5, 0], [33, 13, 6, 4, 0], [30, 56, 6, 3, 4]]
+      .map(([x, y, rx, ry, k]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${p[k]}" transform="rotate(-20 ${x} ${y})"/>`).join('')),
+    stars: p => clipHull([[17, 22], [47, 20], [15, 41], [49, 44], [22, 55], [42, 57], [31, 12]]
+      .map(([x, y]) => `<path d="M${x} ${y - 2.6}L${x + 0.9} ${y - 0.9}L${x + 2.6} ${y}L${x + 0.9} ${y + 0.9}L${x} ${y + 2.6}L${x - 0.9} ${y + 0.9}L${x - 2.6} ${y}L${x - 0.9} ${y - 0.9}Z" fill="${p[3]}"/>`).join('')),
+    sadu: p => clipHull([12, 40].map(y => `<rect x="8" y="${y}" width="48" height="8" fill="${p[0]}"/>` +
+      Array.from({ length: 7 }, (_, i) => `<path d="M${10 + i * 7} ${y + 7}L${13.5 + i * 7} ${y + 1}L${17 + i * 7} ${y + 7}Z" fill="${p[3]}"/>`).join('')).join('')),
+  };
+  const skinOf = pal => pal && pal.startsWith('sk_') && TB.sprites && TB.sprites.SKINS ? TB.sprites.SKINS[pal.slice(3)] : null;
   const hullDefs = p => lin('hull', [[0, p[2]], [1, p[1]]]) + rad('tur', [[0, p[3]], [0.35, p[2]], [1, p[1]]], 0.35, 0.3, 0.8);
   const VEHICLE = {
     // the guardians' armoured car: an eight-sided hull on three wheels a side, with a dome turret
-    A: p => [12, 28, 44].map(y => `<rect x="2.5" y="${y}" width="9" height="12" rx="3" fill="#1C1712" ${O}/><path d="M4.5 ${y + 4}H9.5M4.5 ${y + 8}H9.5" stroke="${p[1]}" stroke-width="1.8"/>` +
+    A: (p, deco) => [12, 28, 44].map(y => `<rect x="2.5" y="${y}" width="9" height="12" rx="3" fill="#1C1712" ${O}/><path d="M4.5 ${y + 4}H9.5M4.5 ${y + 8}H9.5" stroke="${p[1]}" stroke-width="1.8"/>` +
       `<rect x="52.5" y="${y}" width="9" height="12" rx="3" fill="#1C1712" ${O}/><path d="M54.5 ${y + 4}H59.5M54.5 ${y + 8}H59.5" stroke="${p[1]}" stroke-width="1.8"/>`).join('') +
-      `<path d="M20 7H44L54 17V51L44 61H20L10 51V17Z" fill="url(#hull)" ${O}/><path d="M13 18L21 10H43" stroke="${p[3]}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".7"/>` +
+      `<path d="${HULL}" fill="url(#hull)" ${O}/>` + (deco ? deco + `<path d="${HULL}" fill="none" ${O}/>` : '') +
+      `<path d="M13 18L21 10H43" stroke="${p[3]}" stroke-width="2" fill="none" stroke-linecap="round" opacity=".7"/>` +
       `<rect x="16" y="49" width="32" height="3.6" rx="1.8" fill="${p[4]}"/><path d="M24 55.5V58M30 55.5V58M36 55.5V58M42 55.5V58" stroke="${p[0]}" stroke-width="2.2" stroke-linecap="round"/>` +
       `<rect x="29" y="2" width="6" height="30" rx="2" fill="${p[2]}" ${O}/><rect x="27.5" y="1.5" width="9" height="5.5" rx="2" fill="${p[1]}" ${O}/>` +
       `<circle cx="32" cy="36" r="12.5" fill="url(#tur)" ${O}/><circle cx="27.5" cy="31.5" r="3" fill="${p[3]}" opacity=".85"/>`,
@@ -66,7 +79,10 @@
       `<circle cx="32" cy="40" r="14" fill="url(#tur)" ${O}/><circle cx="32" cy="40" r="7.5" fill="${p[0]}" ${O}/>` +
       `<circle cx="32" cy="40" r="4.2" fill="${p[4]}"/><circle cx="30.8" cy="38.8" r="1.4" fill="#FFB7A6"/>`,
   };
-  const vehicle = (design, pal) => { const p = PALS[pal] || PALS.p1; return svg(VEHICLE[design](p), hullDefs(p)); };
+  const vehicle = (design, pal) => {
+    const skin = skinOf(pal), p = skin ? skin.colors : PALS[pal] || PALS.p1;
+    return svg(VEHICLE[design](p, skin && skin.pattern && DECO[skin.pattern] ? DECO[skin.pattern](p) : ''), hullDefs(p));
+  };
 
   // ---------- the oasis ----------
   const ICONS = {

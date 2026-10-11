@@ -16,6 +16,32 @@
     stun: [null, '#3A3A3A', '#7A7A7A', '#A8A8A8', '#E0E0E0', '#A8A8A8'],
   };
 
+  // Colours and patterns for the guardians' cars, sold in the souq: dark, mid, light, shine, accent
+  const SKINS = {
+    sand: { name: 'تمويه الصحراء', price: 300, colors: ['#4E3A1E', '#9C7A45', '#D2AE72', '#F6E3BE', '#2F6B3A'], pattern: 'camo' },
+    emerald: { name: 'الزمرّد', price: 400, colors: ['#053B2E', '#0E7A5C', '#22B38A', '#C6FFF0', '#F2B134'] },
+    rose: { name: 'الورد الطائفي', price: 500, colors: ['#5A1235', '#B0326B', '#E0699C', '#FFE0EE', '#F2B134'] },
+    night: { name: 'ليل الصحراء', price: 600, colors: ['#081129', '#1B3570', '#3A62B2', '#E6EEFF', '#F2B134'], pattern: 'stars' },
+    sadu: { name: 'نقش السدو', price: 800, colors: ['#1E0A0A', '#9E1B1B', '#D23A2A', '#F6E7D4', '#F2B134'], pattern: 'sadu' },
+    ivory: { name: 'العاج والنحاس', price: 900, colors: ['#6B5A48', '#CFC2AC', '#EFE7D8', '#FFFFFF', '#B8732E'] },
+    gold: { name: 'الذهبي', price: 1500, colors: ['#5E3F08', '#C2902A', '#F0C850', '#FFF6C9', '#FFFFFF'] },
+  };
+  for (const id in SKINS) PAL['sk_' + id] = [null].concat(SKINS[id].colors);
+  // Patterns paint over the hull's mid tones before the car is turned to face its way
+  const PATTERNS = {
+    camo: (x, y, v) => {
+      if (v !== 2 && v !== 3) return v;
+      const n = hash(Math.floor(x / 2) + 11, Math.floor(y / 2) + 5);
+      return n < 0.3 ? 1 : n > 0.74 ? 5 : v;
+    },
+    stars: (x, y, v) => (v === 2 && hash(x + 3, y + 9) > 0.84 ? 4 : v),
+    sadu: (x, y, v) => {
+      if (v !== 2) return v;
+      const k = (x + (y % 4 < 2 ? y % 4 : 3 - y % 4)) % 4;
+      return y % 4 === 0 ? 1 : k === 0 ? 4 : k === 2 ? 1 : v;
+    },
+  };
+
   const blank = (w, h) => Array.from({ length: h }, () => Array(w).fill(0));
   const hexCache = {};
   function rgb(hex) {
@@ -360,6 +386,8 @@
     let c = cache.get(key);
     if (!c) {
       let g = vehicleGrid(design, frame);
+      const skin = pal.startsWith('sk_') && SKINS[pal.slice(3)];
+      if (skin && skin.pattern) g = g.map((row, y) => row.map((v, x) => PATTERNS[skin.pattern](x, y, v)));
       for (let i = 0; i < dir; i++) g = rotate(g);
       c = toCanvas(g, PAL[pal]);
       cache.set(key, c);
@@ -759,6 +787,6 @@
   }
 
   TB.sprites = {
-    PAL, REGIONS, vehicle, shadow, terrainPixel, terrainSwatch, effects, iconURL, kuficCanvas, rng, hash,
+    PAL, SKINS, REGIONS, vehicle, shadow, terrainPixel, terrainSwatch, effects, iconURL, kuficCanvas, rng, hash,
   };
 })();
