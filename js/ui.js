@@ -90,7 +90,7 @@
 
   // ---------- screens ----------
   const SCREENS = ['menu', 'online', 'journey', 'souq', 'medals', 'help', 'play', 'editor'];
-  const OVERLAYS = ['settings', 'briefing', 'pause', 'result', 'over', 'codebox', 'gift', 'cardbox'];
+  const OVERLAYS = ['settings', 'briefing', 'pause', 'result', 'over', 'codebox', 'gift', 'cardbox', 'tutor'];
   let screen = 'menu', paused = false, run = null, curtainTimer = 0, playersWanted = 1, musicKey = '', myPid = 0, names = null, onlinePick = false;
   const PLAYER_COLORS = ['#5BD17A', '#6FB3F2', '#B994F0', '#F5A253'];
 
@@ -99,7 +99,7 @@
     const was = screen;
     screen = name;
     if (name !== 'play') { TB.audio.engine('off'); if (was === 'play') holdOrientation(false); }
-    if (name === 'menu') { refreshMenu(); setTimeout(offerGift, 700); }
+    if (name === 'menu') { refreshMenu(); setTimeout(() => (save.tutorial ? offerGift() : offerTutorial()), 700); }
     if (name === 'play' || name === 'editor') layout();
     if (name !== 'play') musicFor('menu');
     if (!isApp && name !== 'menu' && !(history.state && history.state.tb)) history.pushState({ tb: 1 }, '');
@@ -189,6 +189,69 @@
   $('b-share').onclick = () => TB.share.game(
     () => gtoast(ICON.players[0], 'نُسخت رسالة اللعبة', 'ألصقها في واتساب وأرسلها لأصدقائك'),
     text => codeDialog('شارك اللعبة', 'انسخ هذه الرسالة وأرسلها لأصدقائك:', text, null));
+
+  // ---------- the lesson with Commander Salem ----------
+  function offerTutorial() {
+    if (screen !== 'menu' || NET.active || OVERLAYS.some(open)) return;
+    $('tutor-img').src = ICON.commander;
+    $('tutor').hidden = false;
+  }
+  $('tutor-go').onclick = () => { $('tutor').hidden = true; startTutorial(); };
+  $('tutor-later').onclick = () => { save.tutorial = 'skipped'; persist(); $('tutor').hidden = true; offerGift(); };
+  $('b-tutorial').onclick = () => startTutorial();
+  let tut = null;
+  function startTutorial() {
+    if (!save.tutorial || save.tutorial === 'skipped') { save.tutorial = 'started'; persist(); }
+    playersWanted = 1;
+    startStage({ stage: L.tutorial(), mode: 'tutorial' }, { players: 1 });
+    tut = { step: 0, entered: false, t: 0 };
+  }
+  const dummy = (x, y, kind) => { const e = game.makeTank('e', kind, x, y, { dummy: true }); e.dir = 2; game.tanks.push(e); return e; };
+  const finePointer = matchMedia('(pointer:fine)').matches;
+  function coachSay(text) {
+    const c = $('coach');
+    $('coach-img').src = ICON.commander;
+    $('coach-text').textContent = text;
+    c.hidden = false;
+    $('field').classList.add('coaching');
+    c.style.animation = 'none'; void c.offsetWidth; c.style.animation = '';
+    TB.audio.play('appear');
+  }
+  function coachOn(elm) {
+    for (const e of document.querySelectorAll('.coached')) e.classList.remove('coached');
+    if (elm) elm.classList.add('coached');
+  }
+  const moveControl = () => (settings.move === 'tilt' ? tiltView : padL);
+  const moveHint = () => (settings.move === 'tilt' ? 'أمِل الجوال نحو الأعلى لتسير عربتك إلى الدائرة الذهبية.'
+    : settings.move === 'stick' ? 'ادفع العصا نحو الأعلى لتسير عربتك إلى الدائرة الذهبية.'
+      : 'اسحب إبهامك على لوحة الاتجاهات نحو الأعلى لتسير إلى الدائرة الذهبية.') + (finePointer ? ' (أو الأسهم)' : '');
+  const wallMud = () => game.cellsIn(40, 80, 64, 16, c => c === TB.consts.MUD);
+  const TUT_STEPS = [
+    { enter() { coachSay('أهلاً بك يا حارس! أنا القائد سالم، وسأعلّمك في دقيقتين كيف تحمي بئر الواحة.'); }, done: s => s.t > 200 },
+    { enter(s) { s.marker = { x: 72, y: 124 }; coachSay(moveHint()); coachOn(moveControl()); },
+      done: s => { const me = game.players[0].tank; return !!me && Math.hypot(me.x + 8 - s.marker.x, me.y + 8 - s.marker.y) < 9; } },
+    { enter(s) { s.marker = null; s.mud = wallMud(); coachSay('أحسنت! أمامك جدار من الطين. وجّه مدفعك للأعلى واضغط زر النار لتهدمه.' + (finePointer ? ' (المسافة)' : '')); coachOn(fireR); },
+      done: s => wallMud() <= s.mud - 6 },
+    { enter(s) { s.target = dummy(64, 20, 1); coachSay('هذه عربة تدريب للعقارب. أصبها بقذائفك حتى تتحطم.'); coachOn(fireR); }, done: s => s.target.dead },
+    { enter(s) { s.picked = false; game.powerup = { type: 'dates', x: 112, y: 120, t: 0 }; coachSay('التقط التمر! تظهر المكافآت في المعارك، والتمر يعطيك حياة إضافية.'); coachOn(moveControl()); },
+      tick(s) { if (!game.powerup && !s.picked) game.powerup = { type: 'dates', x: 112, y: 120, t: 0 }; }, done: s => s.picked },
+    { enter(s) { game.falcons++; s.flock = [dummy(24, 24, 0), dummy(120, 16, 0), dummy(176, 48, 0)]; coachSay('الصقر سلاحك الخاص: اضغط زر الصقر لينقضّ على ثلاثة أعداء دفعة واحدة.' + (finePointer ? ' (F)' : '')); coachOn($('b-falcon')); },
+      done: s => s.flock.every(e => e.dead) },
+    { enter() {
+      coachOn(null);
+      game.queue = [{ kind: 0, bonus: false }, { kind: 0, bonus: true }, { kind: 1, bonus: false }];
+      game.waveSent = true; game.spawnTimer = 40;
+      coachSay('العقارب قادمون نحو البئر! دمّرهم كلهم قبل أن يصلوا إليه.');
+    }, done: () => false },
+  ];
+  function tutorialTick() {
+    if (!tut || game.state !== 'play' || paused) return;
+    const st = TUT_STEPS[tut.step];
+    if (!tut.entered) { tut.entered = true; tut.t = 0; st.enter(tut); }
+    tut.t++;
+    if (st.tick) st.tick(tut);
+    if (tut.step + 1 < TUT_STEPS.length && st.done(tut)) { tut.step++; tut.entered = false; TB.audio.play('coin'); }
+  }
 
   // ---------- the daily gift ----------
   let gift = null;
@@ -590,6 +653,10 @@
   $('rotate').addEventListener('pointerdown', e => { e.stopPropagation(); rotateHint = false; $('rotate').hidden = true; });
   function startStage(p, extra) {
     extra = extra || {};
+    tut = null;
+    $('coach').hidden = true;
+    $('field').classList.remove('coaching');
+    coachOn(null);
     TB.audio.init();
     rotateHint = true;
     clearTimeout(rotateTimer);
@@ -682,7 +749,7 @@
     else if (name === 'gameover' || name === 'clear') {
       if (hosting()) { data.online = true; NET.hostEnd(data); }
       if (name === 'gameover') setTimeout(() => showOver(data), 250); else setTimeout(() => showResult(data), 150);
-    } else if (name === 'powerup') powerupToast(data);
+    } else if (name === 'powerup') { powerupToast(data); if (tut) tut.picked = true; }
     else if (name === 'toast') toast(data);
     else if (name === 'falcons') {
       if (data.pid === myPid) { save.falcons = data.n; persist(); }
@@ -739,11 +806,18 @@
     const box = $('r-medals');
     box.textContent = '';
     for (const m of fresh) box.append(medalEl(m, false));
-    const next = (mode === 'campaign' || mode === 'endless') && !guest();
+    const lesson = mode === 'tutorial';
+    if (lesson) {
+      save.tutorial = 'done'; persist();
+      $('coach').hidden = true;
+      $('r-title').textContent = 'أحسنت يا حارس!';
+      $('r-why').textContent = 'أنهيت الدرس، وأنت جاهز لحماية الواحة.';
+    }
+    const next = (mode === 'campaign' || mode === 'endless' || lesson) && !guest();
     $('r-next').hidden = !next;
     $('r-retry').hidden = guest();
-    $('r-next').textContent = mode === 'campaign' && n === L.count ? 'إلى ما بعد الرحلة' : 'المرحلة التالية';
-    $('r-map').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : mode === 'custom' ? 'المصمّم' : mode === 'daily' ? 'القائمة' : 'الرحلة';
+    $('r-next').textContent = lesson ? 'ابدأ الرحلة' : mode === 'campaign' && n === L.count ? 'إلى ما بعد الرحلة' : 'المرحلة التالية';
+    $('r-map').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : mode === 'custom' ? 'المصمّم' : mode === 'daily' || lesson ? 'القائمة' : 'الرحلة';
     if (guest()) $('r-why').textContent += ' · بانتظار المضيف ليختار ما بعدها';
     const stars = [...document.querySelectorAll('#result .result-stars .star')];
     stars.forEach(s => s.classList.remove('on'));
@@ -801,10 +875,10 @@
     if (guest()) NET.leave(false);
     else if (hosting()) goJourney();
     else if (run.mode === 'custom') { hideOverlays(); game.state = 'idle'; show('editor'); }
-    else if (run.mode === 'daily') goMenu();
+    else if (run.mode === 'daily' || run.mode === 'tutorial') goMenu();
     else goJourney();
   };
-  $('r-next').onclick = () => { const n = run.stage.n + 1; $('result').hidden = true; openBrief(L.get(n), n > L.count ? 'endless' : 'campaign'); };
+  $('r-next').onclick = () => { const n = run.stage.n + 1; $('result').hidden = true; if (run.mode === 'tutorial') buildJourney(); openBrief(L.get(n), n > L.count ? 'endless' : 'campaign'); };
   $('r-retry').onclick = () => (hosting() ? NET.hostStart(run) : startStage(run));
   $('r-map').onclick = backFromBattle;
 
@@ -875,7 +949,7 @@
     const st = game.stage;
     set('stage', run.mode + st.n + st.region, () => {
       $('ico-region').src = ICON.region[st.region];
-      $('h-stage').textContent = run.mode === 'daily' ? 'اليوم' : run.mode === 'custom' ? 'خريطتي' : run.mode === 'endless' ? 'ساحة ' + fmt(st.n - L.count) : fmt(st.n);
+      $('h-stage').textContent = run.mode === 'tutorial' ? 'الدرس' : run.mode === 'daily' ? 'اليوم' : run.mode === 'custom' ? 'خريطتي' : run.mode === 'endless' ? 'ساحة ' + fmt(st.n - L.count) : fmt(st.n);
     });
     game.players.forEach((pl, i) => {
       const t = pl.tank, chip = chips[i], max = t ? t.max : 3 + ((pl.upg && pl.upg.armor) || 0);
@@ -985,6 +1059,12 @@
         cvx.strokeText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
         cvx.fillText(text, (8 + t.x + 8) * s, (8 + t.y - 3) * s);
       });
+    }
+    if (tut && tut.marker) {
+      const m = tut.marker, r = (9 + Math.sin(performance.now() / 160) * 1.5) * s;
+      cvx.strokeStyle = '#F2B134'; cvx.lineWidth = Math.max(2, s * 1.5);
+      cvx.beginPath(); cvx.arc((8 + m.x) * s, (8 + m.y) * s, r, 0, Math.PI * 2); cvx.stroke();
+      cvx.globalAlpha = 0.25; cvx.fillStyle = '#F2B134'; cvx.fill(); cvx.globalAlpha = 1;
     }
     if (!game.popups.length) return;
     cvx.font = '900 ' + Math.round(7.5 * s) + 'px ' + getComputedStyle(document.body).fontFamily;
@@ -1388,6 +1468,7 @@
       if (n === 5) acc = 0;
       if (hosting()) NET.hostFrame();
     } else acc = 0;
+    tutorialTick();
     draw();
     updateHud();
     if (!tiltView.hidden) paintTilt();

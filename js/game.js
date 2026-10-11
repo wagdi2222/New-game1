@@ -92,7 +92,7 @@
       this.players = [];
       for (let i = 0; i < this.nPlayers; i++) {
         const upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, (opts.playerUpgrades && opts.playerUpgrades[i]) || opts.upgrades || {});
-        this.players.push({ pid: i, upg, lives: this.diff.lives, level: Math.min(3, upg.cannon), tank: null, respawn: 0, coffee: 0, falcons: this.sharedFalcons ? 0 : opts.falcons[i] || 0 });
+        this.players.push({ pid: i, upg, lives: opts.stage && opts.stage.mission === 'tutorial' ? 9 : this.diff.lives, level: Math.min(3, upg.cannon), tank: null, respawn: 0, coffee: 0, falcons: this.sharedFalcons ? 0 : opts.falcons[i] || 0 });
       }
       this.load();
     }
@@ -107,7 +107,7 @@
       this.well = st.well ? { x: WELL.x, y: WELL.y, hp: wellHp, max: wellHp, dead: false, flash: 0, calm: 0 } : null;
       this.parse(st.rows, st.waypoints, !!st.well);
       const coop = 1 + 0.3 * (this.nPlayers - 1);
-      this.queue = []; this.spawnCount = 0; this.need = 0; this.timer = 0; this.boss = null;
+      this.queue = []; this.spawnCount = 0; this.need = 0; this.timer = 0; this.boss = null; this.waveSent = false;
       if (this.mission === 'defend') this.queue = this.makeQueue(Math.round((p.enemies || 20) * (1 + 0.25 * (this.nPlayers - 1))));
       if (this.mission === 'collect') this.need = Math.max(1, this.skins.length - this.diff.skinAllow);
       if (this.mission === 'towers') for (const tw of this.towers) { tw.hp = tw.max = Math.round((p.towerHp || 6) * coop); }
@@ -421,7 +421,8 @@
 
     // ---------- enemies ----------
     enemySpawner() {
-      const spawning = this.mission === 'defend' ? this.queue.length > 0 : this.state === 'play';
+      const queued = this.mission === 'defend' || this.mission === 'tutorial';
+      const spawning = queued ? this.queue.length > 0 : this.state === 'play';
       if (!spawning) return;
       let cap = this.diff.maxOn + this.nPlayers - 1;
       if (this.mission === 'boss') cap = Math.max(1, cap - 2);
@@ -437,7 +438,7 @@
         const busy = this.tanks.some(t => !t.dead && hit(sp.x, sp.y, 16, 16, t.x, t.y, t.size, t.size)) ||
           this.spawns.some(s => hit(sp.x, sp.y, 16, 16, s.x, s.y, s.big ? 32 : 16, s.big ? 32 : 16)) || this.cellsIn(sp.x, sp.y, 16, 16, solid) > 0;
         if (busy) continue;
-        const next = this.mission === 'defend' ? this.queue.shift() : { kind: this.pickKind(), bonus: this.spawnCount % 6 === 3 };
+        const next = queued ? this.queue.shift() : { kind: this.pickKind(), bonus: this.spawnCount % 6 === 3 };
         this.spawns.push({ team: 'e', x: sp.x, y: sp.y, t: 60, kind: next.kind, bonus: next.bonus });
         this.spawnCount++;
         let interval = this.spawnInterval;
@@ -536,6 +537,7 @@
 
     updateEnemy(e) {
       if (e.flash > 0) e.flash--;
+      if (e.dummy) { e.moving = false; return; }
       if (e.cooldown > 0) e.cooldown--;
       if (e.burst && --e.burstTimer <= 0) { e.burst = 0; this.shoot(e, 0, ENEMY[1].bullet * this.diff.eBullet, 1, false); this.sound('eshoot'); }
       if (this.sinking(e)) { e.moving = false; return; }
@@ -1090,6 +1092,7 @@
           else if (this.timer === 1200) this.toast('بقيت عشرون ثانية حتى الفجر');
           break;
         case 'boss': if (this.t > 120 && !this.boss && !this.spawns.some(s => s.big)) this.win(); break;
+        case 'tutorial': if (this.waveSent && !this.queue.length && !enemiesLeft) this.win(); break;
       }
     }
 
@@ -1106,7 +1109,7 @@
       }
       this.result = {
         won, stars, score: this.score, coins: won ? this.coins : Math.round(this.coins / 2), reason: this.loseReason,
-        stats: st, mission: this.mission, stage: this.stage, players: this.nPlayers, difficulty: this.difficulty,
+        stats: st, mission: this.mission, stage: this.stage, players: this.nPlayers, difficulty: this.difficulty, tutorial: this.mission === 'tutorial',
         noDamage: st.hpLost === 0,
       };
       this.emit(won ? 'clear' : 'gameover', this.result);
@@ -1122,6 +1125,7 @@
         case 'towers': return { icon: 'tower', value: this.towers.filter(t => !t.dead).length, label: 'الأبراج' };
         case 'escort': return { icon: 'camel', value: st.camelsArrived, max: this.need, label: 'الجمال' };
         case 'survive': return { icon: 'moon', value: Math.ceil(this.timer / 60), time: true, label: 'حتى الفجر' };
+        case 'tutorial': return { icon: 'foe', value: this.tanks.filter(t => t.team === 'e').length + this.queue.length, label: 'الأهداف' };
         case 'boss': return { icon: 'boss', value: this.boss ? Math.max(0, this.boss.hp) : this.bossHp, max: this.bossHp, label: 'القلعة' };
       }
       return { icon: 'foe', value: 0 };

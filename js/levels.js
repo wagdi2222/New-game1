@@ -24,6 +24,7 @@
     escort: { name: 'رافق القافلة', well: false },
     survive: { name: 'اصمد حتى الفجر', well: true },
     boss: { name: 'القلعة المتحركة', well: true },
+    tutorial: { name: 'الدرس الأول', well: true },
   };
 
   const CAMPAIGN = [
@@ -342,6 +343,18 @@
         n: 0, name: 'خريطتي', region: 'desert', mission, time: 'day', brief: 'خريطة من تصميمك. ' + DEFAULT_BRIEF[mission],
         rows, waypoints: null, level: 6, regionIdx: 1, well: true, mix: REGIONS.oasis.mix, custom: true,
         params: mission === 'towers' ? { towerHp: 7 } : { enemies: 20 },
+      };
+    },
+    // The training ground for the lesson with Commander Salem (26x26 blocks of 8px)
+    tutorial() {
+      const rows = Array.from({ length: 26 }, () => Array(26).fill('.'));
+      for (let x = 5; x <= 12; x++) for (const y of [10, 11]) rows[y][x] = '#';
+      for (const [x, y] of [[2, 4], [22, 6], [2, 16], [22, 16]]) for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) rows[y + dy][x + dx] = '%';
+      for (let x = 16; x <= 20; x++) rows[13][x] = '-';
+      for (const [x, y] of [[20, 9], [21, 9], [20, 10], [21, 10]]) rows[y][x] = '@';
+      return {
+        n: 0, name: 'الدرس الأول', region: 'desert', mission: 'tutorial', time: 'day', brief: 'درس سريع مع القائد سالم.',
+        rows: rows.map(r => r.join('')), waypoints: null, level: 0, regionIdx: 0, well: true, mix: [1, 0, 0, 0, 0], tutorial: true, params: {},
       };
     },
     encodeMap, decodeMap, dayKey, reserved,
