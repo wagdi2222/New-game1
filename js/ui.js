@@ -35,6 +35,8 @@
   const NET = TB.online;
   const hosting = () => NET.active && NET.role === 'host';
   const guest = () => NET.active && NET.role === 'client';
+  // Two players sharing this one phone (not two phones playing online)
+  const localDuo = () => game.nPlayers === 2 && !NET.active;
   const vibrate = p => { if (settings.vibrate && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) { /* unsupported */ } } };
   const game = new TB.Game({
     sound: n => { TB.audio.play(n); if (hosting()) NET.capture('s', n); },
@@ -489,9 +491,15 @@
     if (document.fullscreenElement || !root.requestFullscreen) return;
     root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   }
+  // The "turn the phone sideways" hint for two players on one phone shows for a few seconds only
+  let rotateHint = false, rotateTimer = 0;
+  $('rotate').addEventListener('pointerdown', e => { e.stopPropagation(); rotateHint = false; $('rotate').hidden = true; });
   function startStage(p, extra) {
     extra = extra || {};
     TB.audio.init();
+    rotateHint = true;
+    clearTimeout(rotateTimer);
+    rotateTimer = setTimeout(() => { rotateHint = false; $('rotate').hidden = true; }, 6000);
     applySettings();
     if (settings.full && touch && !standalone) enterFullscreen();
     run = p;
@@ -743,7 +751,7 @@
       $('h-well').hidden = !w;
       if (w) pips($('h-wellhp'), Math.max(0, w.hp), w.max);
     });
-    const local2 = game.nPlayers === 2 && !NET.active, falcons = game.falconsOf(myPid);
+    const local2 = localDuo(), falcons = game.falconsOf(myPid);
     const canFalcon = falcons > 0 && game.state === 'play' && game.tanks.some(t => t.team === 'e');
     set('falcon', falcons + '' + canFalcon + local2, () => {
       $('h-falcons').textContent = fmt(falcons);
@@ -782,13 +790,13 @@
     if (screen === 'play') {
       const play = $('play');
       play.classList.toggle('port', !land);
-      $('rotate').hidden = land || game.nPlayers !== 2;
+      $('rotate').hidden = land || !localDuo() || !rotateHint;
       const cs = getComputedStyle(play);
       const w = vw - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const h = vh - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
       let size;
       if (land) {
-        const side = Math.max((game.nPlayers === 2 ? 140 : pad) + 14, Math.min(w * 0.25, 250));
+        const side = Math.max((localDuo() ? 140 : pad) + 14, Math.min(w * 0.25, 250));
         size = Math.min(h, w - side * 2 - 20);
       } else size = Math.min(w, h - 60 - Math.max(pad + 40, 210));
       fit($('field'), $('cv'), Math.max(180, Math.floor(size)));
@@ -892,7 +900,7 @@
   const tiltDot = tiltView.querySelector('.dot'), tiltArrows = [...tiltView.querySelectorAll('.arr')];
   const tilt = { raw: null, zero: null, vec: [0, 0], dir: -1, alt: -1, at: -1e9, listening: false };
   const TILT_ON = { low: 0.2, mid: 0.13, high: 0.08 }; // sine of the tilt that starts the tank: about 12°, 7.5° and 4.5°
-  const tiltMode = () => settings.move === 'tilt' && !(game.nPlayers === 2 && !NET.active);
+  const tiltMode = () => settings.move === 'tilt' && !localDuo();
   function screenAngle() {
     const o = window.screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : +window.orientation || 0;
     return (((a % 360) + 360) % 360) * Math.PI / 180;
@@ -964,7 +972,7 @@
   }
 
   function configureControls() {
-    const duo = game.nPlayers === 2 && !NET.active, tilted = tiltMode();
+    const duo = localDuo(), tilted = tiltMode();
     $('play').classList.toggle('duo', duo);
     padStyle();
     padL.hidden = tilted;
@@ -1038,7 +1046,7 @@
       return;
     }
     try { zone.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
-    const duo = game.nPlayers === 2;
+    const duo = localDuo();
     const fire = [...zone.querySelectorAll('[data-fire]')].find(f => !f.hidden);
     const pad = [...zone.querySelectorAll('.dpad')].find(d => !d.hidden);
     // In one-player mode the whole fire side shoots; with two players the fire button is a target of its own
@@ -1114,7 +1122,7 @@
   const FIRE = [['Space', 'KeyJ', 'KeyK'], ['Enter', 'NumpadEnter', 'Numpad0', 'Slash', 'ShiftRight']];
   function keyOwner(code) {
     for (let i = 0; i < 2; i++) {
-      const pid = game.nPlayers === 2 && !NET.active ? i : 0;
+      const pid = localDuo() ? i : 0;
       if (KEYS[i][code] !== undefined) return { pid, dir: KEYS[i][code] };
       if (FIRE[i].includes(code)) return { pid, fire: true };
     }
@@ -1154,9 +1162,9 @@
   function pollGamepads() {
     const pads = (navigator.getGamepads ? [...navigator.getGamepads()] : []).filter(Boolean);
     for (let i = 0; i < 2; i++) {
-      const duoPads = game.nPlayers === 2 && !NET.active;
+      const duoPads = localDuo();
       const gp = pads[i], pid = duoPads ? i : 0, st = inputs[pid];
-      if (!gp) { if (i === 0 || game.nPlayers === 2) { st.gp = -1; st.gpFire = false; } continue; }
+      if (!gp) { if (i === 0 || duoPads) { st.gp = -1; st.gpFire = false; } continue; }
       const b = k => gp.buttons[k] && gp.buttons[k].pressed;
       let dir = -1, alt = -1;
       const held = [b(12) ? 0 : -1, b(15) ? 1 : -1, b(13) ? 2 : -1, b(14) ? 3 : -1].filter(d => d >= 0);
