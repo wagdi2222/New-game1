@@ -17,6 +17,9 @@
     p3: ['#2E1350', '#6A35B0', '#9F6BE0', '#EADCFF', '#F2B134'],
     p4: ['#5A2800', '#C25E0A', '#F08A2E', '#FFE3C6', '#FFFFFF'],
     enemy: ['#141317', '#38363F', '#6A6773', '#C9C6D2', '#D2412E'],
+    wood: ['#2A1E14', '#6E4322', '#A86B3C', '#E2C9A0', '#D2412E'],
+    ship: ['#3E2412', '#7A4A24', '#A86B3C', '#F1E4C8', '#D2412E'],
+    vip: ['#4A4038', '#C9C2B2', '#F6F2E8', '#FFFFFF', '#1F8A55'],
   };
   function treads(x, y, w, h, p) {
     let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${p[0]}" ${O}/>`;
@@ -79,9 +82,44 @@
       `<circle cx="32" cy="40" r="14" fill="url(#tur)" ${O}/><circle cx="32" cy="40" r="7.5" fill="${p[0]}" ${O}/>` +
       `<circle cx="32" cy="40" r="4.2" fill="${p[4]}"/><circle cx="30.8" cy="38.8" r="1.4" fill="#FFB7A6"/>`,
   };
+  // The region bosses
+  const leg = (d, p) => `<path d="${d}" stroke="${INK}" stroke-width="4.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" stroke="${p[2]}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const crown = (x, y, w) => `<path d="M${x} ${y}L${x + w * 0.08} ${y - w * 0.55}L${x + w * 0.3} ${y - w * 0.28}L${x + w / 2} ${y - w * 0.75}L${x + w * 0.7} ${y - w * 0.28}L${x + w * 0.92} ${y - w * 0.55}L${x + w} ${y}Z" fill="#F2B134" ${O}/>` +
+    `<circle cx="${x + w / 2}" cy="${y - w * 0.18}" r="${w * 0.09}" fill="#D2412E"/>`;
+  Object.assign(VEHICLE, {
+    king: p => [27, 34, 41, 48].map(y => leg(`M21 ${y}L11 ${y - 4}L5 ${y + 3}`, p) + leg(`M43 ${y}L53 ${y - 4}L59 ${y + 3}`, p)).join('') +
+      leg('M25 24L18 15', p) + leg('M39 24L46 15', p) +
+      `<path d="M18 17C8 17 6 6 12 2C12 8 15 10 19 10C17 6 19 3 22 2C26 8 24 16 18 17Z" fill="${p[2]}" ${O}/>` +
+      `<path d="M46 17C56 17 58 6 52 2C52 8 49 10 45 10C47 6 45 3 42 2C38 8 40 16 46 17Z" fill="${p[2]}" ${O}/>` +
+      `<ellipse cx="32" cy="40" rx="13" ry="19" fill="url(#hull)" ${O}/>` +
+      `<path d="M21 34H43M20 41H44M21 48H43" stroke="${p[0]}" stroke-width="2" stroke-linecap="round"/>` +
+      `<ellipse cx="32" cy="24" rx="9" ry="6.5" fill="${p[1]}" ${O}/><circle cx="28.5" cy="24" r="1.6" fill="${p[4]}"/><circle cx="35.5" cy="24" r="1.6" fill="${p[4]}"/>` +
+      [[32, 55, 4.6], [32, 48, 4.3], [32, 41.5, 4], [33, 35.5, 3.6]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${p[2]}" ${O}/><circle cx="${x - r * 0.35}" cy="${y - r * 0.35}" r="${r * 0.3}" fill="${p[3]}" opacity=".7"/>`).join('') +
+      `<path d="M31 33Q32 26 41 24Q37 28.5 36.5 33Z" fill="${p[4]}" ${O}/>` + crown(25, 19.5, 14),
+    catapult: p => [9, 27, 45].map(y => wheel(2, y, 9, 12, p) + wheel(53, y, 9, 12, p)).join('') +
+      `<rect x="10" y="7" width="8" height="53" rx="2" fill="url(#hull)" ${O}/><rect x="46" y="7" width="8" height="53" rx="2" fill="url(#hull)" ${O}/>` +
+      `<rect x="10" y="12" width="44" height="6" rx="1.5" fill="${p[1]}" ${O}/><rect x="10" y="52" width="44" height="6" rx="1.5" fill="${p[1]}" ${O}/><rect x="10" y="33" width="44" height="5" rx="1.5" fill="${p[1]}" ${O}/>` +
+      `<rect x="29" y="12" width="6" height="36" rx="2" fill="#C68A50" ${O}/>` +
+      `<rect x="21" y="41" width="22" height="15" rx="2" fill="${p[1]}" ${O}/><path d="M23 46H41M23 51H41" stroke="${p[0]}" stroke-width="1.6"/>` +
+      `<circle cx="32" cy="11" r="9" fill="url(#rock)" ${O}/><circle cx="29" cy="8" r="2.4" fill="#E4DED2"/>` +
+      [[14, 10], [50, 10], [14, 57], [50, 57]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2" fill="${p[4]}"/>`).join(''),
+    ship: p => `<path d="M32 2Q48 13 49 30V54Q49 61 42 62H22Q15 61 15 54V30Q16 13 32 2Z" fill="url(#hull)" ${O}/>` +
+      `<path d="M24 16V60M32 9V60M40 16V60" stroke="${p[0]}" stroke-width="1.3" opacity=".55"/>` +
+      [[13.5, 29], [13.5, 49], [48.5, 29], [48.5, 49]].map(([x, y]) => `<rect x="${x}" y="${y}" width="2.4" height="5" rx=".8" fill="${INK}"/>`).join('') +
+      [18, 38].map(y => `<path d="M5 ${y + 7}Q32 ${y - 7} 59 ${y + 7}L59 ${y + 12}Q32 ${y - 1} 5 ${y + 12}Z" fill="url(#sail)" ${O}/><circle cx="32" cy="${y + 6.5}" r="2.6" fill="${p[0]}" ${O}/>`).join('') +
+      `<path d="M32 4V12" stroke="${INK}" stroke-width="2"/><path d="M33 4L42 7L33 10Z" fill="${p[4]}" ${O}/>`,
+    chief: p => VEHICLE.boss(p) + `<path d="M8 12V2M56 12V2" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>` +
+      `<path d="M8.5 2.5L16 5L8.5 8Z" fill="${p[4]}" ${O}/><path d="M55.5 2.5L48 5L55.5 8Z" fill="${p[4]}" ${O}/>` + crown(23, 31, 18),
+    // Commander Salem's white car with a green pennant
+    vip: p => wheel(10, 10, 9, 14, p) + wheel(45, 10, 9, 14, p) + wheel(10, 40, 9, 14, p) + wheel(45, 40, 9, 14, p) +
+      `<rect x="17" y="6" width="30" height="54" rx="9" fill="url(#hull)" ${O}/><rect x="20.5" y="17" width="23" height="8" rx="3" fill="#7FB4CC" ${O}/>` +
+      `<rect x="21" y="30" width="22" height="15" rx="4" fill="${p[3]}" ${O}/><rect x="20.5" y="48" width="23" height="5" rx="2" fill="#7FB4CC" ${O}/>` +
+      `<path d="M47 56V40" stroke="${INK}" stroke-width="2"/><path d="M47.5 41L58 44.5L47.5 48Z" fill="#1F8A55" ${O}/>`,
+  });
   const vehicle = (design, pal) => {
     const skin = skinOf(pal), p = skin ? skin.colors : PALS[pal] || PALS.p1;
-    return svg(VEHICLE[design](p, skin && skin.pattern && DECO[skin.pattern] ? DECO[skin.pattern](p) : ''), hullDefs(p));
+    return svg(VEHICLE[design](p, skin && skin.pattern && DECO[skin.pattern] ? DECO[skin.pattern](p) : ''), hullDefs(p) +
+      rad('rock', [[0, '#D8D2C6'], [0.6, '#9A958C'], [1, '#5E5A54']], 0.38, 0.35, 0.75) + lin('sail', [[0, '#FFF6E0'], [1, '#D9C8A0']], 0, 1));
   };
 
   // ---------- the oasis ----------
@@ -177,6 +215,22 @@
       lin('sc', [[0, '#5C5966'], [1, '#26242B']])),
 
     boss: () => vehicle('boss', 'enemy'),
+    king: () => vehicle('king', 'enemy'),
+    catapult: () => vehicle('catapult', 'wood'),
+    ship: () => vehicle('ship', 'ship'),
+    chief: () => vehicle('chief', 'enemy'),
+    vip: () => vehicle('vip', 'vip'),
+
+    // a prisoner of the gang behind wooden bars
+    cage: () => svg(
+      `<rect x="6" y="6" width="52" height="52" rx="4" fill="#3A2A1C" ${O}/>` +
+      `<path d="M18 46Q32 36 46 46V58H18Z" fill="url(#robe)" ${O}/><circle cx="32" cy="30" r="10" fill="url(#ghutra)" ${O}/>` +
+      `<path d="M22.5 27Q32 22 41.5 27" stroke="${INK}" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="28.5" cy="32" r="1.3" fill="${INK}"/><circle cx="35.5" cy="32" r="1.3" fill="${INK}"/>` +
+      [14, 24, 40, 50].map(x => `<rect x="${x - 2.2}" y="6" width="4.4" height="52" fill="url(#bar)" ${O}/>`).join('') +
+      `<rect x="4" y="4" width="56" height="7" rx="2" fill="url(#bar2)" ${O}/><rect x="4" y="53" width="56" height="7" rx="2" fill="url(#bar2)" ${O}/>` +
+      `<rect x="44" y="26" width="9" height="11" rx="2" fill="#F2B134" ${O}/><path d="M46 26V22.5Q48.5 19 51 22.5V26" stroke="${INK}" stroke-width="2" fill="none"/>`,
+      lin('bar', [[0, '#C68A50'], [1, '#6E4322']]) + lin('bar2', [[0, '#B47640'], [1, '#6E4322']], 0, 1) + lin('robe', [[0, '#FFFFFF'], [1, '#CFC8BA']], 0, 1) +
+      `<pattern id="ghutra" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#F4EFE6"/><rect width="2" height="2" fill="#C0392B"/><rect x="2" y="2" width="2" height="2" fill="#C0392B"/></pattern>`),
 
     // ---------- power-ups ----------
     shield: () => svg(

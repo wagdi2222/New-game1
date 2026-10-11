@@ -248,9 +248,10 @@
     broadcast({
       t: 'end', r: {
         won: result.won, stars: result.stars, score: result.score, coins: result.coins, reason: result.reason, mission: result.mission,
-        players: result.players, noDamage: result.noDamage,
+        players: result.players, noDamage: result.noDamage, bossType: result.bossType,
         stats: { deaths: st.deaths, hpLost: st.hpLost, wellDamaged: st.wellDamaged, camelsLost: st.camelsLost, camelsArrived: st.camelsArrived,
-          skinsCollected: st.skinsCollected, skinsStolen: st.skinsStolen, combo: st.combo, towers: st.towers, boss: st.boss, falconUses: st.falconUses, kills: st.kills },
+          skinsCollected: st.skinsCollected, skinsStolen: st.skinsStolen, combo: st.combo, towers: st.towers, boss: st.boss, falconUses: st.falconUses, kills: st.kills,
+          prisonersSaved: st.prisonersSaved, prisonersLost: st.prisonersLost, vipHit: st.vipHit, storms: st.storms },
       },
     }, true);
     O.inGame = false;

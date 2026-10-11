@@ -203,6 +203,10 @@
     mason: t => { noise(t, 0.12, { freq: 400, vol: 0.25 }); noise(t + 0.15, 0.12, { freq: 400, vol: 0.25 }); },
     hammer: t => { tone(1800, t, 0.25, { type: 'triangle', vol: 0.07 }); tone(2690, t, 0.18, { type: 'sine', vol: 0.04 }); },
     shield: t => tone(523, t, 0.4, { type: 'triangle', to: 1046, vol: 0.06 }),
+    roar: t => { tone(95, t, 0.6, { type: 'sawtooth', to: 60, vol: 0.12 }); noise(t, 0.55, { freq: 420, to: 180, filter: 'lowpass', vol: 0.22 }); },
+    storm: t => noise(t, 2.2, { freq: 500, to: 1600, filter: 'bandpass', q: 1.5, vol: 0.16 }),
+    cage: t => { noise(t, 0.18, { freq: 1600, to: 500, vol: 0.2 }); tone(240, t, 0.12, { type: 'triangle', to: 150, vol: 0.08 }); },
+    freed: t => [784, 988, 1319, 1568].forEach((f, i) => tone(f, t + i * 0.07, 0.09, { vol: 0.05, type: 'triangle' })),
   };
 
   function play(name) {

@@ -4,6 +4,7 @@
 //   .  sand        #  mud wall     @  fort stone   ~  water       %  palm        -  dune       *  quicksand
 //   [ ] ^ _  mud halves (left, right, top, bottom)     { } / \  stone halves
 //   T  enemy tower   Q  water skin   L  lantern   B  dhow on the water (two tiles wide)
+//   w  open sea for the pirate ship (water that is never filled in)      C  a cage with a prisoner
 (function () {
   'use strict';
   const TB = window.TB = window.TB || {};
@@ -23,7 +24,9 @@
     towers: { name: 'دمّر الأبراج', well: true },
     escort: { name: 'رافق القافلة', well: false },
     survive: { name: 'اصمد حتى الفجر', well: true },
-    boss: { name: 'القلعة المتحركة', well: true },
+    boss: { name: 'اهزم الزعيم', well: true },
+    rescue: { name: 'حرّر الأسرى', well: true },
+    vip: { name: 'احمِ القائد سالم', well: false },
     tutorial: { name: 'الدرس الأول', well: true },
     duel: { name: 'آخر من يصمد', well: false },
     flag: { name: 'خطف الراية', well: false },
@@ -33,23 +36,23 @@
     { region: 'desert', mission: 'defend', time: 'day', seed: 11, name: 'طلائع العقارب', brief: 'وصلت طلائع عصابة العقارب إلى أطراف الصحراء. احمِ بئر الواحة ودمّر المركبات المهاجمة.' },
     { region: 'desert', mission: 'collect', time: 'dawn', seed: 23, name: 'قِرَب الفجر', brief: 'بعثرت العاصفة قِرَب الماء في الرمال. اجمعها قبل أن يسرقها الجوّالون.' },
     { region: 'desert', mission: 'towers', time: 'day', seed: 37, name: 'أبراج الرمل', brief: 'بنى العقارب أبراجاً تخرج منها مركباتهم. اهدمها كلها لتتوقف الغارات.' },
-    { region: 'desert', mission: 'boss', time: 'dusk', seed: 41, name: 'زعيم الكثبان', brief: 'القلعة المتحركة تزحف نحو البئر مع الغروب. أوقفها قبل أن تصل!' },
+    { region: 'desert', mission: 'boss', time: 'dusk', seed: 41, name: 'ملك العقارب', brief: 'ملك العقارب بنفسه يزحف نحو البئر مع الغروب. إذا وقفت في طريقه اندفع نحوك بكلّابتيه، فابتعد عن خطّه حين يرتجف!' },
     { region: 'oasis', mission: 'escort', time: 'dawn', seed: 53, name: 'قافلة التمر', brief: 'قافلة التمر تعبر الواحة مع الفجر. احمِ الجمال حتى تصل إلى الطرف الآخر.' },
-    { region: 'oasis', mission: 'defend', time: 'day', seed: 67, name: 'حصار الواحة', brief: 'العقارب يحاصرون الواحة من كل جهة. اصمد ودافع عن البئر.' },
+    { region: 'oasis', mission: 'rescue', time: 'day', seed: 67, name: 'أسرى الواحة', brief: 'أسر العقارب بعض أهل الواحة وحبسوهم في أقفاص. حطّم الأقفاص، ثم اقترب من كل أسير ليمشي خلفك حتى البئر.' },
     { region: 'oasis', mission: 'survive', time: 'night', seed: 71, name: 'ليلة النخيل', brief: 'هجوم ليلي بين النخيل. لا ترى إلا ما يضيئه مصباحك والفوانيس. اصمد حتى الفجر.' },
     { region: 'oasis', mission: 'boss', time: 'dusk', seed: 83, name: 'قلعة البحيرة', brief: 'قلعة متحركة أخرى عند البحيرة، ومعها حرّاسها. أطلق عليها كل ما لديك.' },
     { region: 'mountains', mission: 'towers', time: 'day', seed: 97, name: 'أبراج الجبل', brief: 'تحصّن العقارب بين الصخور. اهدم أبراجهم في الممرات الجبلية.' },
-    { region: 'mountains', mission: 'escort', time: 'dawn', seed: 101, name: 'الممر الضيق', brief: 'القافلة تعبر ممراً ضيقاً بين الجبال. انتبه لقذائف المدفعية من خلف الصخور.' },
+    { region: 'mountains', mission: 'vip', time: 'dawn', seed: 101, name: 'موكب القائد', brief: 'سأخرج بنفسي لأتفقّد مواقعنا في الجبال. احمِ عربتي البيضاء حتى أنهي جولتي، وسأطلق بنفسي على من يعترض طريقي.' },
     { region: 'mountains', mission: 'collect', time: 'day', seed: 113, name: 'ينابيع الجبل', brief: 'نبع الجبل ملأ القِرَب. اجمعها وأعدها إلى الواحة.' },
-    { region: 'mountains', mission: 'boss', time: 'dusk', seed: 127, name: 'حصن الصخر', brief: 'قلعة العقارب الجبلية تتقدم بين الصخور. حطّمها قبل أن تصل.' },
+    { region: 'mountains', mission: 'boss', time: 'dusk', seed: 127, name: 'المنجنيق العملاق', brief: 'نصب العقارب منجنيقاً عملاقاً بين الصخور. يرمي ثلاث صخرات معاً، وبعضها يبقى حيث يسقط. لا تقف في مكان واحد!' },
     { region: 'coast', mission: 'defend', time: 'day', seed: 131, name: 'المرفأ', brief: 'المراكب في المرفأ والعقارب على الساحل. احمِ البئر وأهل الساحل.' },
     { region: 'coast', mission: 'survive', time: 'night', seed: 149, name: 'ليلة الساحل', brief: 'هجوم ليلي على الشاطئ. الفوانيس دليلك حتى يطلع الفجر.' },
     { region: 'coast', mission: 'escort', time: 'dusk', seed: 157, name: 'قافلة اللؤلؤ', brief: 'قافلة تحمل اللؤلؤ من المرفأ إلى المدينة. أوصلها سالمة.' },
-    { region: 'coast', mission: 'boss', time: 'dusk', seed: 163, name: 'قلعة الموج', brief: 'قلعة متحركة على الساحل، أقوى من سابقاتها. لا تتراجع!' },
+    { region: 'coast', mission: 'boss', time: 'dusk', seed: 163, name: 'سفينة القراصنة', brief: 'سفينة قراصنة حالفت العقارب وتقصف الساحل من البحر. أطلق عليها من الشاطئ، وابتعد عن مستوى مدافعها الجانبية.' },
     { region: 'oldcity', mission: 'towers', time: 'day', seed: 173, name: 'أسوار المدينة', brief: 'نصب العقارب أبراجهم في أزقة المدينة القديمة. حرّر المدينة منها.' },
     { region: 'oldcity', mission: 'collect', time: 'dawn', seed: 181, name: 'سقاية الحي', brief: 'أهل الحي عطشى. اجمع القِرَب من الأزقة قبل أن يأخذها العقارب.' },
     { region: 'oldcity', mission: 'survive', time: 'night', seed: 191, name: 'ليلة السوق', brief: 'آخر هجوم ليلي على سوق المدينة. اصمد حتى الفجر.' },
-    { region: 'oldcity', mission: 'boss', time: 'dusk', seed: 199, name: 'القلعة الكبرى', brief: 'زعيم العقارب بنفسه في القلعة الكبرى. انتصر عليه لتكتمل الرحلة!' },
+    { region: 'oldcity', mission: 'boss', time: 'dusk', seed: 199, name: 'القلعة الكبرى', brief: 'زعيم العقارب بنفسه في القلعة الكبرى. كلما أصبته غضب أكثر: يستدعي رجاله ثم يندفع نحوك. انتصر عليه لتكتمل الرحلة!' },
   ];
 
   function rng(seed) {
@@ -143,7 +146,7 @@
   };
 
   // ---------- reachability: steel, water and boats block, everything else can be crossed or shot ----------
-  const blocked = ch => ch === '@' || ch === '~' || ch === 'B' || ch === '{' || ch === '}' || ch === '/' || ch === '\\';
+  const blocked = ch => ch === '@' || ch === '~' || ch === 'B' || ch === 'w' || ch === '{' || ch === '}' || ch === '/' || ch === '\\';
   function flood(grid, sx, sy) {
     const seen = new Set([sx + ',' + sy]), queue = [[sx, sy]];
     while (queue.length) {
@@ -167,7 +170,7 @@
         const [x, y] = k.split(',').map(Number);
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const nx = x + dx, ny = y + dy;
-          if (nx >= 0 && ny >= 0 && nx <= 12 && ny <= 12 && blocked(grid[ny][nx]) && grid[ny][nx] !== 'B') edge.push([nx, ny]);
+          if (nx >= 0 && ny >= 0 && nx <= 12 && ny <= 12 && blocked(grid[ny][nx]) && grid[ny][nx] !== 'B' && grid[ny][nx] !== 'w') edge.push([nx, ny]);
         }
       }
       if (!edge.length) return false;
@@ -189,12 +192,29 @@
     PAINT[def.region](grid, rand, boss ? Math.max(0, k - 0.5) : k);
     // The boss is 32px wide: thin the arena out so it has room to move
     if (boss) for (let y = 0; y < 13; y++) for (let x = 0; x < 13; x++) if (grid[y][x] !== '.' && grid[y][x] !== 'B' && rand() < 0.2) grid[y][x] = '.';
+    // The pirate ship sails the two water tiles down the left edge; the top row stays a way past it
+    if (boss && def.region === 'coast') {
+      for (let y = 1; y <= 12; y++) { grid[y][0] = 'w'; grid[y][1] = 'w'; }
+      for (let x = 0; x <= 3; x++) grid[0][x] = '.';
+    }
 
-    let road = null, waypoints = null;
+    let road = null, waypoints = null, stops = null;
+    const mark = (x, y) => { if (x >= 0 && x <= 12) road.add(x + ',' + y); };
+    if (def.mission === 'vip') {
+      // Salem's rounds: in from the left, up, across the top, down, and out to the right, stopping at three posts
+      const r0 = 9 + Math.floor(rand() * 2), c1 = 2 + Math.floor(rand() * 2), top = 2 + Math.floor(rand() * 2), c2 = 8 + Math.floor(rand() * 3), r1 = 6 + Math.floor(rand() * 2);
+      road = new Set();
+      for (let x = 0; x <= c1; x++) mark(x, r0);
+      for (let y = top; y <= r0; y++) mark(c1, y);
+      for (let x = c1; x <= c2; x++) mark(x, top);
+      for (let y = top; y <= r1; y++) mark(c2, y);
+      for (let x = c2; x <= 12; x++) mark(x, r1);
+      waypoints = [[-1, r0], [c1, r0], [c1, top], [c2, top], [c2, r1], [13, r1]];
+      stops = [2, 3, 4];
+    }
     if (def.mission === 'escort') {
       const r0 = 3 + Math.floor(rand() * 3), r1 = 7 + Math.floor(rand() * 3), c1 = 4 + Math.floor(rand() * 5);
       road = new Set();
-      const mark = (x, y) => { if (x >= 0 && x <= 12) road.add(x + ',' + y); };
       for (let x = 0; x <= c1; x++) mark(x, r0);
       for (let y = Math.min(r0, r1); y <= Math.max(r0, r1); y++) mark(c1, y);
       for (let x = c1; x <= 12; x++) mark(x, r1);
@@ -229,6 +249,18 @@
         }
       }
     }
+    if (def.mission === 'rescue') {
+      // far from the well, so every prisoner is a trip across the battlefield
+      const quads = [[1, 4, 1, 3], [8, 11, 1, 3], [4, 8, 3, 5], [1, 11, 5, 6]].slice(0, (def.level || 0) < 10 ? 3 : 4);
+      for (const [x0, x1, y0, y1] of quads) {
+        for (let tries = 0; tries < 40; tries++) {
+          const x = x0 + Math.floor(rand() * (x1 - x0 + 1)), y = y0 + Math.floor(rand() * (y1 - y0 + 1));
+          if (!free(x, y)) continue;
+          grid[y][x] = 'C'; targets.push([x, y]);
+          break;
+        }
+      }
+    }
     if (def.time === 'night') {
       let placed = 0;
       for (let tries = 0; tries < 80 && placed < 5; tries++) {
@@ -238,7 +270,7 @@
       }
     }
     connect(grid, targets, rand);
-    return { rows: grid.map(r => r.join('')), waypoints };
+    return { rows: grid.map(r => r.join('')), waypoints, stops };
   }
 
   function params(mission, regionIdx, level) {
@@ -247,8 +279,10 @@
       case 'collect': return { skins: 6 };
       case 'towers': return { towerHp: 5 + regionIdx * 2 };
       case 'escort': return { camels: 3, camelHp: 4 };
+      case 'rescue': return { cageHp: 3 + Math.floor(regionIdx / 2) };
+      case 'vip': return { vipHp: 8 };
       case 'survive': return { seconds: 60 + regionIdx * 15 };
-      case 'boss': return { bossHp: 50 + regionIdx * 15 };
+      case 'boss': return { bossHp: 50 + regionIdx * 15, boss: BOSS_OF[REGION_ORDER[regionIdx]] };
     }
     return {};
   }
@@ -259,20 +293,23 @@
     const map = build(Object.assign({}, def, { level, towers }));
     return {
       n, name: def.name, region: def.region, mission: def.mission, time: def.time, brief: def.brief,
-      rows: map.rows, waypoints: map.waypoints, level, regionIdx,
+      rows: map.rows, waypoints: map.waypoints, stops: map.stops, level, regionIdx,
       well: MISSIONS[def.mission].well, mix: REGIONS[def.region].mix,
       params: params(def.mission, regionIdx, level),
     };
   }
 
-  const MISSION_CYCLE = ['defend', 'collect', 'towers', 'escort', 'survive', 'boss'];
+  const BOSS_OF = { desert: 'king', oasis: 'fort', mountains: 'catapult', coast: 'ship', oldcity: 'chief' };
+  const MISSION_CYCLE = ['defend', 'collect', 'towers', 'escort', 'rescue', 'survive', 'vip', 'boss'];
   const DEFAULT_BRIEF = {
     defend: 'موجة جديدة من العقارب تقترب. احمِ البئر.',
     collect: 'القِرَب متناثرة في الساحة. اجمعها قبل العدو.',
     towers: 'أبراج جديدة للعقارب. اهدمها كلها.',
     escort: 'قافلة تحتاج حمايتك حتى تعبر.',
     survive: 'ليلة طويلة. اصمد حتى الفجر.',
-    boss: 'قلعة متحركة جديدة. أوقفها!',
+    boss: 'زعيم جديد للعقارب يقترب. اهزمه!',
+    rescue: 'العقارب يحتجزون أسرى في أقفاص. حطّمها وأوصل الأسرى إلى البئر.',
+    vip: 'سأتفقّد المواقع اليوم. احمِ عربتي حتى أنهي جولتي.',
   };
   function generated(n, seed, region, mission, level, name) {
     const time = mission === 'survive' ? 'night' : mission === 'boss' ? 'dusk' : ['day', 'dawn', 'dusk'][seed % 3];
@@ -323,17 +360,17 @@
   }
 
   TB.levels = {
-    REGION_ORDER, REGIONS, MISSIONS,
+    REGION_ORDER, REGIONS, MISSIONS, BOSS_OF,
     count: CAMPAIGN.length,
     regionOf: n => CAMPAIGN[Math.min(n, CAMPAIGN.length) - 1].region,
     get(n) {
       if (n <= CAMPAIGN.length) return stageFrom(CAMPAIGN[n - 1], n, n - 1);
-      const i = n - CAMPAIGN.length - 1, region = REGION_ORDER[i % 5], mission = MISSION_CYCLE[i % 6];
+      const i = n - CAMPAIGN.length - 1, region = REGION_ORDER[i % 5], mission = MISSION_CYCLE[i % MISSION_CYCLE.length];
       return generated(n, n * 7919 + 13, region, mission, Math.min(30, n - 1), REGIONS[region].name + ' · ' + (n - CAMPAIGN.length));
     },
     daily(key) {
       const k = key || dayKey(), seed = seedOf('waha' + k);
-      const region = REGION_ORDER[seed % 5], mission = MISSION_CYCLE[(seed >>> 3) % 6];
+      const region = REGION_ORDER[seed % 5], mission = MISSION_CYCLE[(seed >>> 3) % MISSION_CYCLE.length];
       const st = generated(0, seed % 100000 + 1, region, mission, 10, 'تحدي اليوم');
       st.daily = k;
       return st;

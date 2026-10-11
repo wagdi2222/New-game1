@@ -14,6 +14,9 @@
     bonus: [null, '#083A38', '#13807B', '#35C2B6', '#D8FFF9', '#F2B134'],
     hit: [null, '#6A6A6A', '#E4E4E4', '#FFFFFF', '#FFFFFF', '#FFFFFF'],
     stun: [null, '#3A3A3A', '#7A7A7A', '#A8A8A8', '#E0E0E0', '#A8A8A8'],
+    ship: [null, '#3E2412', '#7A4A24', '#A86B3C', '#F1E4C8', '#D2412E'],
+    wood: [null, '#2A1E14', '#6E4322', '#9C6431', '#C9C2B4', '#D2412E'],
+    vip: [null, '#4A4038', '#D9D2C2', '#F6F2E8', '#FFFFFF', '#1F8A55'],
   };
 
   // Colours and patterns for the guardians' cars, sold in the souq: dark, mid, light, shine, accent
@@ -233,7 +236,7 @@
 
   // ---------- vehicles (16px, or 32px for the boss), all facing up ----------
   function vehicleGrid(design, frame) {
-    const n = design === 'boss' ? 32 : 16, g = blank(n, n);
+    const n = ['boss', 'king', 'catapult', 'ship', 'chief'].includes(design) ? 32 : 16, g = blank(n, n);
     const px = (x, y, c) => { if (x >= 0 && y >= 0 && x < n && y < n) g[y][x] = c; };
     const rect = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) px(i, j, c); };
     const tread = (x0, w, y0, y1, outerLeft) => {
@@ -361,7 +364,86 @@
         for (let y = 0; y <= 6; y++) { px(6, y, 3); px(9, y, 2); }
         px(6, 0, 1); px(9, 0, 1);
         break;
-      case 'boss': {
+      // Commander Salem's white car, a green pennant at the back
+      case 'vip':
+        wheel(2, 3, 4); wheel(12, 3, 4); wheel(2, 10, 4); wheel(12, 10, 4);
+        rect(4, 2, 8, 13, 2);
+        for (let x = 4; x <= 11; x++) { px(x, 2, 1); px(x, 3, 3); px(x, 14, 1); }
+        for (let y = 2; y <= 14; y++) { px(4, y, 3); px(11, y, 1); }
+        rect(5, 5, 6, 2, 1); for (let x = 5; x <= 10; x++) px(x, 6, 4);
+        rect(6, 9, 4, 4, 3); px(6, 9, 4);
+        for (const [x, y] of [[12, 13], [13, 13], [13, 14], [14, 14], [12, 12]]) px(x, y, 5);
+        px(11, 11, 1); px(11, 12, 1);
+        break;
+      // The Scorpion King: eight stepping legs, great pincers in front, its tail curled over the back
+      case 'king': {
+        for (let i = 0; i < 4; i++) {
+          const y0 = 13 + i * 4, lift = (i + frame) % 2;
+          for (const right of [false, true]) {
+            const X = x => (right ? 31 - x : x);
+            for (const [x, y] of [[8, y0], [7, y0], [6, y0 - 1], [5, y0 - 1], [4, y0 - 1], [3, y0], [2, y0 + 1 - lift], [1, y0 + 2 - lift]]) px(X(x), y, 1);
+            for (const [x, y] of [[8, y0 + 1], [7, y0 + 1], [6, y0], [5, y0], [4, y0], [3, y0 + 1]]) px(X(x), y, 2);
+          }
+        }
+        for (let y = 8; y <= 30; y++) for (let x = 7; x <= 24; x++) {
+          const d = Math.hypot((x + 0.5 - 16) / 8.6, (y + 0.5 - 19) / 11.4);
+          if (d <= 1) px(x, y, d > 0.86 ? (x < 16 ? 3 : 1) : y % 4 === 1 ? 1 : x < 12 ? 3 : 2);
+        }
+        for (const right of [false, true]) {
+          const X = x => (right ? 31 - x : x);
+          for (const [x, y] of [[10, 10], [9, 10], [9, 9], [8, 9], [8, 8], [7, 8]]) px(X(x), y, 2);
+          for (let y = 3; y <= 9; y++) for (let x = 2; x <= 9; x++) {
+            const d = Math.hypot((x + 0.5 - 5.6) / 3.6, (y + 0.5 - 6.6) / 3);
+            if (d <= 1) px(X(x), y, d > 0.75 ? (x < 6 ? 3 : 1) : x < 5 ? 4 : 3);
+          }
+          for (const [x, y, c] of [[2, 3, 3], [2, 2, 3], [3, 1, 3], [3, 0, 5], [4, 2, 2], [8, 3, 3], [8, 2, 3], [7, 1, 3], [7, 0, 5], [7, 2, 1], [5, 3, 1], [6, 3, 1]]) px(X(x), y, c);
+        }
+        for (const [cy, r] of [[27, 2.9], [23, 2.7], [19, 2.5], [15, 2.4]]) {
+          for (let y = cy - 3; y <= cy + 3; y++) for (let x = 12; x <= 19; x++) {
+            const d = Math.hypot(x + 0.5 - 16, y + 0.5 - cy);
+            if (d <= r) px(x, y, d > r - 0.9 ? 1 : x < 16 && y < cy ? 4 : 3);
+          }
+        }
+        for (const [x, y] of [[15, 12], [16, 12], [16, 11], [17, 11], [17, 10], [18, 10], [18, 9]]) px(x, y, 5);
+        for (const [x, y] of [[12, 9], [14, 8], [16, 8], [18, 8], [20, 9], [13, 9], [15, 9], [17, 9], [19, 9]]) px(x, y, '#F2B134');
+        break;
+      }
+      // The giant catapult: a wooden frame on wheels, its arm loaded with a boulder
+      case 'catapult': {
+        for (const y of [4, 13, 22]) { wheel(1, y, 6); wheel(29, y, 6); px(3, y + 2, 1); px(28, y + 2, 1); }
+        for (let y = 5; y <= 29; y++) for (let x = 4; x <= 27; x++) {
+          const beam = x <= 5 || x >= 26 || y <= 6 || y >= 28 || y === 17;
+          if (beam) px(x, y, x === 4 || y === 5 ? 3 : x === 27 || y === 29 ? 1 : 2);
+        }
+        for (let y = 2; y <= 25; y++) { px(15, y, '#B47640'); px(16, y, '#6E4322'); }
+        for (let y = 21; y <= 27; y++) for (let x = 11; x <= 20; x++) px(x, y, y === 21 || x === 11 ? 3 : y === 27 || x === 20 ? 1 : 2);
+        for (let y = 0; y <= 6; y++) for (let x = 11; x <= 20; x++) {
+          const d = Math.hypot(x + 0.5 - 15.5, y + 0.5 - 3);
+          if (d < 4.6) px(x, y, d > 3.6 ? '#3E2412' : d < 1.6 ? '#C9C2B4' : '#8E8A82');
+        }
+        for (const [x, y] of [[5, 8], [26, 8], [5, 26], [26, 26]]) px(x, y, 5);
+        break;
+      }
+      // The pirate ship, seen from above, sailing up: a pointed bow, two sails, gun ports on both sides
+      case 'ship': {
+        for (let y = 0; y <= 31; y++) {
+          const half = y < 13 ? 1 + y * 0.72 : y > 28 ? 9.5 - (y - 28) * 0.9 : 9.5;
+          const x0 = Math.round(16 - half), x1 = Math.round(16 + half) - 1;
+          for (let x = x0; x <= x1; x++) px(x, y, x <= x0 + 1 ? (x === x0 ? 1 : 3) : x >= x1 - 1 ? 1 : y === 31 ? 1 : (x - 16) % 4 === 0 ? 1 : 2);
+        }
+        for (const y of [14, 24, 28]) for (const x of [8, 23]) { px(x, y, '#1A1208'); px(x, y + 1, '#1A1208'); }
+        for (const sy of [8, 18]) {
+          for (let x = 3; x <= 28; x++) {
+            const bulge = Math.round(2.4 * (1 - ((x + 0.5 - 16) / 13) ** 2));
+            for (let y = sy - bulge; y <= sy + 2 - bulge; y++) px(x, y, y === sy + 2 - bulge ? '#CDBE9C' : 4);
+          }
+          for (let x = 3; x <= 28; x++) px(x, sy + 3, 1);
+          px(15, sy + 4, 1); px(16, sy + 4, 1);
+        }
+        for (const [x, y] of [[16, 1], [16, 2], [17, 2], [18, 2], [17, 3], [18, 3], [19, 3]]) px(x, y, 5);
+        break;
+      }
+      case 'boss': case 'chief': {
         tread(0, 6, 2, 31, true); tread(26, 6, 2, 31, false);
         hull(6, 4, 25, 31);
         // battlements along the edges: a fortress on tracks
@@ -374,6 +456,11 @@
           }
         }
         for (const bx of [10, 15, 20]) { for (let y = 0; y <= 11; y++) { px(bx, y, 3); px(bx + 1, y, 2); } px(bx, 0, 1); px(bx + 1, 0, 1); }
+        if (design === 'chief') {
+          // the gang's chief: a gold crown on the turret and red banners at the corners
+          for (const [x, y] of [[12, 14], [14, 12], [16, 11], [18, 12], [20, 14], [13, 14], [15, 13], [16, 13], [17, 13], [19, 14], [14, 15], [18, 15]]) px(x, y, '#F2B134');
+          for (const [x, y] of [[6, 4], [7, 4], [6, 5], [25, 4], [24, 4], [25, 5], [6, 30], [7, 30], [25, 30], [24, 30]]) px(x, y, 5);
+        }
         break;
       }
     }
@@ -456,6 +543,36 @@
     if (state >= 2) for (const [x, y] of [[10, 2], [10, 3], [11, 3], [2, 11], [3, 11], [4, 12], [9, 13], [13, 4]]) g[y][x] = '#141017';
     return toCanvas(g);
   }
+  // A cage of the scorpion gang with a prisoner inside; bars go missing as it is shot
+  function cageCanvas(state) {
+    const g = blank(16, 16);
+    for (let y = 4; y <= 11; y++) for (let x = 5; x <= 10; x++) g[y][x] = y < 7 ? (x + y) % 2 ? '#C0392B' : '#F4EFE6' : '#ECE6DA';
+    g[5][7] = '#C68A50'; g[5][8] = '#C68A50';
+    for (let y = 1; y <= 14; y++) for (let x = 1; x <= 14; x++) {
+      const frame = x === 1 || x === 14 || y === 1 || y === 14, bar = x % 3 === 1;
+      const broken = (state >= 1 && (x === 4 || x === 10) && y > 6) || (state >= 2 && x === 7);
+      if (frame) g[y][x] = y === 1 || x === 1 ? '#9C6431' : '#5A3418';
+      else if (bar && !broken) g[y][x] = x === 1 ? '#9C6431' : '#7A4A24';
+    }
+    return toCanvas(outline(g, '#1A1208'));
+  }
+  // A freed prisoner seen from above: a red-checked shemagh with its black agal, white shoulders, swinging arms
+  function prisonerCanvas(frame, hurt) {
+    const g = blank(16, 16);
+    for (let y = 6; y <= 13; y++) for (let x = 2; x <= 13; x++) {
+      const d = Math.hypot((x + 0.5 - 8) / 5.6, (y + 0.5 - 10) / 3.2);
+      if (d <= 1) g[y][x] = x < 8 ? '#FFFFFF' : '#D8D2C4';
+    }
+    const swing = frame ? 1 : -1;
+    for (const [x, y] of [[1, 9 + swing], [1, 10 + swing], [14, 9 - swing], [14, 10 - swing]]) g[y][x] = '#C68A50';
+    for (let y = 2; y <= 12; y++) for (let x = 3; x <= 12; x++) {
+      const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 7);
+      if (d <= 3.2) g[y][x] = (x + y) % 2 ? '#C0392B' : '#F4EFE6';
+    }
+    if (hurt) for (const row of g) for (let x = 0; x < 16; x++) if (row[x]) row[x] = '#FFFFFF';
+    return toCanvas(outline(g, '#1A1208'));
+  }
+
   function rubbleCanvas(seed) {
     const g = blank(16, 16), rnd = rng(seed);
     for (let i = 0; i < 26; i++) {
@@ -760,6 +877,8 @@
         lantern: lanternCanvas(),
         dhow: dhowCanvas(),
         falcon: [falconCanvas(0), falconCanvas(1)],
+        cage: [cageCanvas(0), cageCanvas(1), cageCanvas(2)],
+        prisoner: [prisonerCanvas(0), prisonerCanvas(1), prisonerCanvas(0, true)],
         flags: [[flagCanvas('#57C072', '#1F7A45', 0), flagCanvas('#57C072', '#1F7A45', 1)], [flagCanvas('#5AA8EA', '#1C5DA6', 0), flagCanvas('#5AA8EA', '#1C5DA6', 1)]],
         portrait: portraitCanvas(),
         frame: frameTile(),

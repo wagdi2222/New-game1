@@ -25,7 +25,7 @@
     if (!Array.isArray(s.skins)) s.skins = [];
     if (s.skin && !s.skins.includes(s.skin)) s.skin = '';
     s.upg = Object.assign({ armor: 0, cannon: 0, engine: 0 }, s.upg);
-    s.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [] }, s.stats);
+    s.stats = Object.assign({ kills: 0, towers: 0, falcon: 0, buys: 0, bosses: 0, daily: [], bossTypes: [] }, s.stats);
     return s;
   }
   const save = fillSave(store.get('save', {}));
@@ -66,8 +66,13 @@
   ICON.p1 = ICON.players[0]; ICON.p2 = ICON.players[1];
   for (const k of ['shield', 'whirl', 'mason', 'hammer', 'falcon', 'dates', 'coffee', 'qirba', 'najda']) ICON.pu[k] = V(k);
   for (const r of ['desert', 'oasis', 'mountains', 'coast', 'oldcity']) ICON.region[r] = V('region:' + r);
-  const MISSION_ICON = { defend: ICON.well, collect: ICON.skin, towers: ICON.tower, escort: ICON.camel, survive: ICON.lantern, boss: ICON.boss };
-  const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss, duel: V('duel'), flag: V('flag') };
+  ICON.bosses = { fort: ICON.boss, king: V('king'), catapult: V('catapult'), ship: V('ship'), chief: V('chief') };
+  const BOSS_ORDER = ['king', 'fort', 'catapult', 'ship', 'chief'];
+  const bossOf = st => (st.params && st.params.boss) || 'fort';
+  const missionIcon = st => (st.mission === 'boss' ? ICON.bosses[bossOf(st)] : MISSION_ICON[st.mission]);
+  ICON.cage = V('cage'); ICON.vip = V('vip');
+  const MISSION_ICON = { defend: ICON.well, collect: ICON.skin, towers: ICON.tower, escort: ICON.camel, rescue: ICON.cage, survive: ICON.lantern, vip: ICON.vip, boss: ICON.boss };
+  const OBJ_ICON = { foe: ICON.foe, skin: ICON.skin, tower: ICON.tower, camel: ICON.camel, moon: ICON.lantern, boss: ICON.boss, cage: ICON.cage, vip: ICON.vip, duel: V('duel'), flag: V('flag') };
   const TEAM_NAMES = ['فريق النخلة', 'فريق الموج'], TEAM_COLORS = ['#57C072', '#5AA8EA'];
   const TIME_NAME = { day: 'نهار', dawn: 'فجر', dusk: 'غروب', night: 'ليل' };
   const MAQAM_NAME = { hijaz: 'مقام الحجاز', bayati: 'مقام البيات', kurd: 'مقام الكرد', saba: 'مقام الصبا', rast: 'مقام الرست', nahawand: 'مقام النهاوند' };
@@ -336,7 +341,7 @@
         const b = el('button', 'node' + (st.mission === 'boss' ? ' boss' : '') + (n === save.unlocked && !save.stars[n] ? ' next' : ''));
         b.disabled = locked;
         const disc = el('div', 'disc');
-        disc.append(img(MISSION_ICON[st.mission]), el('span', 'num', fmt(n)));
+        disc.append(img(missionIcon(st)), el('span', 'num', fmt(n)));
         b.append(disc, el('div', 'name', st.name), starRow(save.stars[n] || 0));
         b.onclick = () => openBrief(st, 'campaign');
         nodes.append(b);
@@ -364,7 +369,9 @@
       case 'towers': return 'اهدم ' + fmt(count('T')) + ' أبراج للعقارب';
       case 'escort': return 'أوصل ' + fmt(Math.min(p.camels || 3, d.camels)) + ' من ' + fmt(p.camels || 3) + ' جمال إلى الطرف الآخر';
       case 'survive': return 'اصمد ' + fmt(Math.round((p.seconds || 90) * d.timeMul)) + ' ثانية حتى يطلع الفجر';
-      case 'boss': return 'دمّر القلعة المتحركة واحمِ البئر';
+      case 'boss': return 'دمّر ' + TB.consts.BOSSES[bossOf(st)].name + ' واحمِ البئر';
+      case 'rescue': { const total = count('C'); return 'حطّم ' + fmt(total) + ' أقفاص وأوصل ' + fmt(Math.max(1, total - (settings.difficulty === 'hard' ? 0 : 1))) + ' أسرى على الأقل إلى البئر'; }
+      case 'vip': return 'احمِ عربة القائد سالم حتى تمرّ بـ' + fmt((st.stops || []).length) + ' مواقع وتخرج من الطرف الآخر';
     }
     return '';
   }
@@ -493,7 +500,9 @@
     const MISSION_HELP = {
       defend: 'دمّر كل المركبات المهاجمة واحمِ البئر.', collect: 'اجمع قِرَب الماء قبل أن يسرقها العقارب.',
       towers: 'اهدم أبراج العقارب التي تخرج منها مركباتهم.', escort: 'احمِ القافلة حتى تعبر الخريطة.',
-      survive: 'ليل مظلم: اصمد حتى الفجر، والفوانيس تضيء الطريق.', boss: 'دمّر القلعة المتحركة العملاقة.',
+      survive: 'ليل مظلم: اصمد حتى الفجر، والفوانيس تضيء الطريق.', boss: 'لكل منطقة زعيم ضخم بحيلة مختلفة. اهزمه واحمِ البئر.',
+      rescue: 'حطّم الأقفاص بقذائفك، ثم اقترب من الأسير فيمشي خلفك. أوصله إلى البئر واحمه من رصاص العقارب.',
+      vip: 'عربة القائد سالم البيضاء تمرّ بمواقع على الطريق. احمها حتى تخرج؛ وهو يطلق على من يقف في خطّه.',
     };
     for (const m in MISSION_HELP) $('help-missions').append(item(MISSION_ICON[m], L.MISSIONS[m].name, MISSION_HELP[m]));
     const TERRAIN = [[1, 'جدار طين', 'يتهدّم بالقذائف'], [2, 'حجر القلاع', 'لا يُكسر إلا بمدفع من ثلاث نجوم'], [3, 'ماء الواحة', 'يمنع الدبابات وتعبره القذائف'],
@@ -502,7 +511,14 @@
     const C = TB.consts;
     const FOE_HELP = ['سريع لكنه ضعيف', 'يطلق رشقتين متتاليتين', 'تقذف من فوق الجدران؛ ابتعد عن الدائرة الحمراء', 'يزرع ألغاماً خلفه؛ دمّرها بقذيفة', 'مدرّع ثقيل يحتاج ٤ إصابات'];
     C.ENEMY.forEach((e, k) => $('help-foes').append(item(V('vehicle:' + e.design + ':enemy'), e.name, FOE_HELP[k] + ' · ' + fmt(e.score) + ' نقطة')));
-    $('help-foes').append(item(ICON.boss, C.BOSS.name, 'زعيم ضخم بثلاثة مدافع وقذائف'));
+    const BOSS_HELP = {
+      king: 'زعيم الصحراء: يرتجف ثم يندفع نحو من يقف في خطّه ويحطّم الطين، ويطلق من كلّابتيه',
+      fort: 'زعيم الواحات: ثلاثة مدافع وقذائف من فوق الجدران',
+      catapult: 'زعيم الجبال: يرمي ثلاث صخرات معاً، وبعضها يبقى حجراً حيث يسقط',
+      ship: 'زعيم الساحل: يبحر في الماء ويطلق رشقات جانبية نحو الشاطئ',
+      chief: 'زعيم المدينة: يغضب كلما أصبته، فيستدعي رجاله ثم يندفع نحوك',
+    };
+    for (const b of BOSS_ORDER) $('help-foes').append(item(ICON.bosses[b], C.BOSSES[b].name, BOSS_HELP[b]));
     for (const k of Object.keys(PU_INFO)) $('help-items').append(item(ICON.pu[k], PU_INFO[k][0], PU_INFO[k][1]));
   }
 
@@ -584,9 +600,13 @@
     { id: 'hunter', name: 'صائد العقارب', desc: 'دمّر مئة مركبة', icon: ICON.foe, test: () => save.stats.kills >= 100 },
     { id: 'keeper', name: 'حارس البئر', desc: 'افز بمهمة دون أن يُصاب البئر', icon: ICON.well, test: c => c.r && c.r.won && c.r.stage.well && !c.r.stats.wellDamaged },
     { id: 'caravan', name: 'قائد القافلة', desc: 'أوصل القافلة كاملة', icon: ICON.camel, test: c => c.r && c.r.won && c.r.mission === 'escort' && c.r.stats.camelsLost === 0 },
+    { id: 'liberator', name: 'المحرِّر', desc: 'أوصل كل الأسرى إلى البئر', icon: ICON.cage, test: c => c.r && c.r.won && c.r.mission === 'rescue' && c.r.stats.prisonersLost === 0 && c.r.stats.prisonersSaved >= c.r.stage.rows.join('').split('C').length - 1 },
+    { id: 'bodyguard', name: 'الحارس الأمين', desc: 'أنهِ جولة القائد سالم دون أن تُصاب عربته', icon: ICON.vip, test: c => c.r && c.r.won && c.r.mission === 'vip' && !c.r.stats.vipHit },
+    { id: 'storm', name: 'ابن العاصفة', desc: 'افز بمرحلة هبّت فيها عاصفة رملية', icon: ICON.pu.whirl, test: c => c.r && c.r.won && c.r.stats.storms > 0 },
     { id: 'towers', name: 'هادم الأبراج', desc: 'اهدم عشرة أبراج', icon: ICON.tower, test: () => save.stats.towers >= 10 },
     { id: 'night', name: 'ابن الليل', desc: 'اصمد حتى الفجر في مرحلة ليلية', icon: ICON.lantern, test: c => c.r && c.r.won && c.r.stage.time === 'night' },
-    { id: 'boss', name: 'قاهر القلعة', desc: 'دمّر قلعة متحركة', icon: ICON.boss, test: () => save.stats.bosses >= 1 },
+    { id: 'boss', name: 'قاهر الزعيم', desc: 'اهزم أحد زعماء العقارب', icon: ICON.boss, test: () => save.stats.bosses >= 1 },
+    { id: 'bosshunter', name: 'صيّاد الزعماء', desc: 'اهزم زعماء المناطق الخمسة', icon: ICON.bosses.chief, test: () => BOSS_ORDER.every(b => save.stats.bossTypes.includes(b)) },
     { id: 'falconer', name: 'الصقّار', desc: 'أطلق الصقر عشر مرات', icon: ICON.falcon, test: () => save.stats.falcon >= 10 },
     { id: 'merchant', name: 'تاجر السوق', desc: 'اشترِ من السوق خمس مرات', icon: ICON.pu.coffee, test: () => save.stats.buys >= 5 },
     { id: 'architect', name: 'المهندس', desc: 'العب على خريطة من تصميمك', icon: ICON.pu.mason, test: c => c.r && c.r.stage.custom },
@@ -745,7 +765,7 @@
   $('b-quit').onclick = () => (guest() ? NET.leave(false) : goJourney());
 
   function dyingBanner(data) {
-    const why = { well: 'سقط البئر!', lives: 'نفدت الدبابات!', camels: 'ضاعت القافلة!', skins: 'سُرقت القِرَب!' }[data.reason] || '';
+    const why = { well: 'سقط البئر!', lives: 'نفدت الدبابات!', camels: 'ضاعت القافلة!', skins: 'سُرقت القِرَب!', prisoners: 'ضاع الأسرى!', vip: 'أُصيبت عربة القائد!' }[data.reason] || '';
     $('banner').textContent = why;
     $('banner').classList.add('rise');
     TB.audio.engine('off');
@@ -795,6 +815,7 @@
     save.stats.towers += r.stats.towers;
     save.stats.falcon += r.stats.falconUses;
     save.stats.bosses += r.stats.boss;
+    if (r.won && r.bossType && r.stats.boss && !save.stats.bossTypes.includes(r.bossType)) save.stats.bossTypes.push(r.bossType);
     if (run.mode === 'daily' && !save.stats.daily.includes(r.stage.daily)) save.stats.daily.push(r.stage.daily);
   }
 
@@ -973,7 +994,8 @@
     bank(r);
     persist();
     showXP('o-xp', r, checkMedals(r).length);
-    $('o-reason').textContent = { well: 'سقط البئر في يد العقارب.', lives: NET.active ? 'نفدت دباباتكم.' : 'نفدت دباباتك.', camels: 'لم تصل القافلة.', skins: 'سرق العقارب القِرَب.' }[r.reason] || '';
+    $('o-reason').textContent = { well: 'سقط البئر في يد العقارب.', lives: NET.active ? 'نفدت دباباتكم.' : 'نفدت دباباتك.', camels: 'لم تصل القافلة.', skins: 'سرق العقارب القِرَب.',
+      prisoners: 'لم يبقَ من الأسرى ما يكفي.', vip: 'أُصيبت عربة القائد سالم.' }[r.reason] || '';
     $('o-score').textContent = fmt(r.score);
     const earned = $('o-earned');
     earned.textContent = '';
@@ -982,6 +1004,10 @@
     const TIPS = [
       'اشترِ من السوق درعاً أقوى أو صقراً قبل أن تعود.', 'قِربة الماء ترمّم البئر، والبنّاء يحيطه بالحجر.', 'ابقَ قريباً من البئر حين يكثر الأعداء.',
       'الدائرة الحمراء تعني قذيفة مدفعية قادمة: ابتعد عنها.', 'الصقر يدمّر أقرب ثلاثة أعداء دفعة واحدة.', 'جرّب الصعوبة «سهل» من الإعدادات.',
+      ...(r.mission === 'rescue' ? ['قُد الأسرى في طريق آمن؛ رصاص العقارب يصيبهم.', 'إذا سقطت دبابتك توقّف الأسير مكانه حتى يأتيه أحد.'] : []),
+      ...(r.mission === 'vip' ? ['امشِ أمام عربة القائد ونظّف الطريق قبل أن تصلها.', 'قِربة الماء تصلح عربة القائد.'] : []),
+      ...(r.mission === 'boss' && r.bossType === 'king' ? ['حين يرتجف ملك العقارب ابتعد عن خطّه؛ سيندفع بعد لحظة.'] : []),
+      ...(r.mission === 'boss' && r.bossType === 'ship' ? ['السفينة تطلق جانباً فقط: هاجمها من مستوى مختلف ثم انعطف نحوها.'] : []),
     ];
     $('o-tip').textContent = 'نصيحة: ' + TIPS[Math.floor(Math.random() * TIPS.length)];
     $('o-map').textContent = guest() ? 'اخرج من الغرفة' : hosting() ? 'عُد إلى الغرفة' : run.mode === 'custom' ? 'المصمّم' : 'الرحلة';
@@ -1102,7 +1128,11 @@
       $('h-obj-label').textContent = obj.label;
       $('h-obj-val').textContent = obj.time ? fmt(Math.floor(obj.value / 60)) + ':' + fmt(String(obj.value % 60).padStart(2, '0')) : obj.max ? fmt(obj.value) + '/' + fmt(obj.max) : fmt(obj.value);
       $('h-boss').hidden = obj.icon !== 'boss';
-      if (obj.icon === 'boss') $('h-bossbar').style.width = Math.max(0, 100 * obj.value / obj.max) + '%';
+      if (obj.icon === 'boss') {
+        $('h-bossbar').style.width = Math.max(0, 100 * obj.value / obj.max) + '%';
+        const src = ICON.bosses[obj.boss] || ICON.boss;
+        if ($('ico-boss').getAttribute('src') !== src) $('ico-boss').src = src;
+      }
     });
     set('caps', obj.caps ? obj.caps.join('-') + game.duel : 'none', () => {
       $('h-caps').hidden = !(obj.caps && game.duel === 'flag');
@@ -1442,6 +1472,7 @@
     };
     for (const o of game.tanks) if (!o.dead && game.isFoe(t, o) && inLane(o.x, o.y, o.size, o.size) && clear(o.x, o.y, o.size, o.size)) return true;
     for (const tw of game.towers) if (!tw.dead && inLane(tw.x, tw.y, 16, 16) && clear(tw.x, tw.y, 16, 16)) return true;
+    for (const c of game.cages) if (!c.open && inLane(c.x, c.y, 16, 16) && clear(c.x, c.y, 16, 16)) return true;
     return false;
   }
   const inside = (elm, e, slack) => { const r = elm.getBoundingClientRect(); return e.clientX >= r.left - slack && e.clientX <= r.right + slack && e.clientY >= r.top - slack && e.clientY <= r.bottom + slack; };

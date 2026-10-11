@@ -1,5 +1,6 @@
 // Game engine: a 208x208 field of 4px terrain cells, 16px vehicles (32px boss), 60 ticks per second.
-// Missions: defend the well, collect water skins, destroy towers, escort a caravan, survive the night, beat the boss.
+// Missions: defend the well, collect water skins, destroy towers, escort a caravan, survive the night, beat the boss,
+// free the prisoners and bring them to the well, and guard Commander Salem's car on its rounds.
 (function () {
   'use strict';
   const TB = window.TB = window.TB || {};
@@ -27,7 +28,16 @@
     { id: 'miner', name: 'زارع الألغام', design: 'miner', speed: 0.7, bullet: 2.2, hp: 2, score: 250, coins: 12, fire: 0.5, mines: true },
     { id: 'heavy', name: 'الحصن', design: 'heavy', speed: 0.42, bullet: 2.6, hp: 4, score: 400, coins: 20, fire: 1 },
   ];
-  const BOSS = { id: 'boss', name: 'القلعة المتحركة', design: 'boss', speed: 0.38, bullet: 2.6, score: 3000, coins: 150, fire: 1 };
+  // A different boss for each region: the moving fort, the Scorpion King who charges, the giant catapult that
+  // throws boulders, the pirate ship off the coast, and the gang's chief who fights in three phases
+  const BOSSES = {
+    fort: { id: 'fort', name: 'القلعة المتحركة', short: 'القلعة', arrives: 'وصلت', design: 'boss', pal: 'enemy', speed: 0.38, bullet: 2.6, score: 3000, coins: 150, fire: 1 },
+    king: { id: 'king', name: 'ملك العقارب', short: 'الملك', arrives: 'وصل', design: 'king', pal: 'enemy', speed: 0.46, bullet: 2.6, score: 3000, coins: 150, fire: 1 },
+    catapult: { id: 'catapult', name: 'المنجنيق العملاق', short: 'المنجنيق', arrives: 'وصل', design: 'catapult', pal: 'wood', speed: 0.3, bullet: 2.4, score: 3200, coins: 160, fire: 0.5 },
+    ship: { id: 'ship', name: 'سفينة القراصنة', short: 'السفينة', arrives: 'وصلت', design: 'ship', pal: 'ship', speed: 0.34, bullet: 2.6, score: 3400, coins: 170, fire: 1 },
+    chief: { id: 'chief', name: 'زعيم العقارب', short: 'الزعيم', arrives: 'وصل', design: 'chief', pal: 'enemy', speed: 0.4, bullet: 2.8, score: 5000, coins: 250, fire: 1 },
+  };
+  const BOSS = BOSSES.fort;
   // Cannon levels from the blacksmith's hammer (and the souq): faster shells, two shells, then shells that break stone
   const PLAYER = [
     { design: 'A', bullet: 2.5, max: 1, dmg: 1, power: false },
@@ -82,6 +92,7 @@
       this.tanks = []; this.bullets = []; this.shells = []; this.mines = []; this.towers = []; this.camels = [];
       this.skins = []; this.lanterns = []; this.dhows = []; this.effects = []; this.popups = []; this.spawns = []; this.birds = [];
       this.powerup = null; this.well = null; this.t = 0;
+      this.cages = []; this.prisoners = []; this.vip = null; this.storm = 0;
     }
 
     // ---------- setup ----------
@@ -126,12 +137,33 @@
         }
         this.waypoints = st.waypoints.map(([x, y]) => [x * 16, y * 16]);
       }
-      if (this.mission === 'boss') this.bossHp = Math.round((p.bossHp || 24) * this.diff.bossMul * coop);
+      if (this.mission === 'rescue') {
+        for (const c of this.cages) c.hp = c.max = p.cageHp || 3;
+        this.need = Math.max(1, this.cages.length - (this.difficulty === 'hard' ? 0 : 1));
+      }
+      if (this.mission === 'vip') {
+        this.waypoints = st.waypoints.map(([x, y]) => [x * 16, y * 16]);
+        this.stops = st.stops || [];
+        const [sx, sy] = this.waypoints[0], hp = Math.round((p.vipHp || 6) * (this.difficulty === 'easy' ? 1.5 : 1));
+        this.vip = { team: 'p', vip: true, size: 16, x: sx, y: sy, hp, max: hp, wp: 1, dir: 1, wait: 0, waited: 0, flash: 0, dead: false, arrived: false, cooldown: 90, bullets: 0, anim: 0, stopsDone: 0 };
+      }
+      for (const pl of this.players) pl.trail = [];
+      // A sandstorm may blow through daytime battles once the journey is under way
+      this.storm = 0; this.stormDir = 1; this.stormMax = 0;
+      this.stormNext = !st.duel && this.mission !== 'tutorial' && st.time !== 'night' && (st.level || 0) >= 2 ? Math.round(60 * (25 + Math.random() * 35)) : -1;
+      if (this.mission === 'boss') {
+        this.bossHp = Math.round((p.bossHp || 24) * this.diff.bossMul * coop);
+        this.bossType = BOSSES[p.boss] ? p.boss : 'fort';
+        // The ship needs open water down the left edge; any other map gets the fort instead
+        if (this.bossType === 'ship' && !this.shipLane()) this.bossType = 'fort';
+        this.rocks = 0;
+      }
       this.spawnTimer = 40;
       this.spawnInterval = Math.round(Math.max(60, 175 - (st.level || 0) * 4) * this.diff.spawnMul);
       this.stats = {
         kills: [0, 0, 0, 0, 0], boss: 0, towers: 0, falconUses: 0, deaths: 0, hpLost: 0, wellDamaged: false,
         camelsLost: 0, camelsArrived: 0, skinsCollected: 0, skinsStolen: 0, combo: false, recentKills: [],
+        prisonersSaved: 0, prisonersLost: 0, cagesOpened: 0, vipHit: false, storms: 0,
       };
       this.endTimer = 0; this.result = null;
       this.duel = st.duel || null; this.flags = []; this.caps = null; this.winner = null;
@@ -154,7 +186,10 @@
       if (this.state !== 'intro') return;
       this.state = 'play';
       for (const pl of this.players) this.spawnPlayer(pl);
-      if (this.mission === 'boss') this.spawns.push({ team: 'e', kind: -1, x: 88, y: 0, t: 90, big: true });
+      if (this.mission === 'boss') {
+        const at = this.bossType === 'ship' ? { x: 0, y: 64 } : { x: 88, y: 0 };
+        this.spawns.push({ team: 'e', kind: -1, x: at.x, y: at.y, t: 90, big: true, btype: this.bossType });
+      }
       this.sound('start');
     }
 
@@ -176,7 +211,7 @@
     parse(rows, waypoints, well) {
       this.map.fill(EMPTY);
       this.road.fill(0);
-      const TYPES = { '#': MUD, '@': STONE, '~': WATER, '%': PALM, '-': DUNE, '*': QUICK, B: WATER };
+      const TYPES = { '#': MUD, '@': STONE, '~': WATER, '%': PALM, '-': DUNE, '*': QUICK, B: WATER, w: WATER };
       const HALF = {
         '[': [MUD, 0, 0, 2, 4], ']': [MUD, 2, 0, 2, 4], '^': [MUD, 0, 0, 4, 2], '_': [MUD, 0, 2, 4, 2],
         '{': [STONE, 0, 0, 2, 4], '}': [STONE, 2, 0, 2, 4], '/': [STONE, 0, 0, 4, 2], '\\': [STONE, 0, 2, 4, 2],
@@ -189,6 +224,7 @@
           else if (ch === 'Q') this.skins.push({ x: px, y: py, taken: false });
           else if (ch === 'L') this.lanterns.push({ x: px + 3, y: py + 2 });
           else if (ch === 'B') this.dhows.push({ x: px, y: py });
+          else if (ch === 'C') this.cages.push({ x: px, y: py, hp: 3, max: 3, open: false, flash: 0 });
           let type = TYPES[ch], x0 = 0, y0 = 0, w = k, h = k;
           if (!type && HALF[ch]) {
             [type, x0, y0, w, h] = HALF[ch];
@@ -307,6 +343,9 @@
       if (this.cellsIn(x, y, s, s, solid)) return true;
       if (this.well && hit(x, y, s, s, this.well.x, this.well.y, 16, 16)) return true;
       for (const tw of this.towers) if (!tw.dead && hit(x, y, s, s, tw.x, tw.y, 16, 16)) return true;
+      for (const c of this.cages) if (!c.open && hit(x, y, s, s, c.x, c.y, 16, 16)) return true;
+      const v = this.vip;
+      if (v && t !== v && !v.dead && !v.arrived && v.x > -16 && hit(x, y, s, s, v.x, v.y, 16, 16) && !hit(t.x, t.y, s, s, v.x, v.y, 16, 16)) return true;
       for (const c of this.camels) {
         if (c.dead || c.arrived || c.x <= -16 || !hit(x, y, s, s, c.x, c.y, 16, 16)) continue;
         // A tank a camel walked past can always drive away from it
@@ -389,11 +428,15 @@
         this.sound('shoot');
         return;
       }
-      const spec = t.kind < 0 ? BOSS : ENEMY[t.kind];
+      const spec = this.specOf(t);
       if (t.kind < 0) {
         if (t.bullets > 0) return;
-        for (const off of [-10, 0, 10]) this.shoot(t, off, spec.bullet * this.diff.eBullet, 1, false);
-        t.cooldown = 70;
+        const speed = spec.bullet * this.diff.eBullet;
+        if (t.btype === 'ship') return this.broadside(t);
+        // the king snaps both claws; the chief fires a wider fan once he is angry
+        const offs = t.btype === 'king' ? [-12, 12] : t.btype === 'catapult' ? [0] : t.btype === 'chief' && t.phase >= 3 ? [-14, -7, 0, 7, 14] : [-10, 0, 10];
+        for (const off of offs) this.shoot(t, off, speed, 1, false);
+        t.cooldown = t.btype === 'chief' && t.phase >= 2 ? 50 : 70;
       } else {
         if (t.bullets >= (spec.burst ? 2 : 1)) return;
         this.shoot(t, 0, spec.bullet * this.diff.eBullet, 1, false);
@@ -431,6 +474,7 @@
         p.moving = this.moveTank(p, speed);
       } else p.moving = false;
       if (p.moving) p.anim++;
+      if (this.mission === 'rescue') this.markTrail(pl, p);
       if (inp.fire) this.fire(p);
       for (const sk of this.skins) {
         if (sk.taken || !hit(p.x + 2, p.y + 2, 12, 12, sk.x + 2, sk.y + 2, 12, 12)) continue;
@@ -486,7 +530,12 @@
         } else {
           const e = this.makeTank('e', s.kind, s.x, s.y);
           e.bonus = s.bonus;
-          if (s.kind < 0) { this.boss = e; this.toast('القلعة المتحركة وصلت!'); }
+          if (s.kind < 0) {
+            e.btype = s.btype || 'fort'; e.phase = 1;
+            this.boss = e;
+            const spec = BOSSES[e.btype];
+            this.toast(spec.name + ' ' + spec.arrives + '!');
+          }
           this.tanks.push(e);
         }
       }
@@ -513,6 +562,8 @@
       const chase = boss ? 0.75 : Math.min(0.45, 0.15 + (this.stage.level || 0) * 0.02) * this.diff.chase;
       for (const pl of this.players) if (pl.tank) list.push({ x: pl.tank.x, y: pl.tank.y, w: chase / this.nPlayers });
       for (const c of this.camels) if (!c.dead && !c.arrived && c.x >= 0) list.push({ x: c.x, y: c.y, w: 0.4 / this.camels.length });
+      const v = this.vip;
+      if (v && !v.dead && !v.arrived && v.x >= 0) list.push({ x: v.x, y: v.y, w: boss ? 0.15 : 0.3 });
       if (e.kind === 0 && this.t > 600) {
         let best = null;
         for (const sk of this.skins) if (!sk.taken && (!best || dist(sk, e) < dist(best, e))) best = sk;
@@ -551,6 +602,7 @@
       if (this.well && !this.well.dead) targets.push(this.well);
       for (const pl of this.players) if (pl.tank) targets.push(pl.tank);
       for (const c of this.camels) if (!c.dead && !c.arrived) targets.push(c);
+      if (this.vip && !this.vip.dead && !this.vip.arrived) targets.push(this.vip);
       const half = e.size / 2 - 8;
       for (const t of targets) {
         const ax = Math.abs(t.x - e.x - half) < 10 + half, ay = Math.abs(t.y - e.y - half) < 10 + half;
@@ -566,12 +618,15 @@
       if (e.cooldown > 0) e.cooldown--;
       if (e.burst && --e.burstTimer <= 0) { e.burst = 0; this.shoot(e, 0, ENEMY[1].bullet * this.diff.eBullet, 1, false); this.sound('eshoot'); }
       if (this.sinking(e)) { e.moving = false; return; }
-      const spec = e.kind < 0 ? BOSS : ENEMY[e.kind];
+      const spec = this.specOf(e);
       const confused = this.whirl > 0;
-      const speed = spec.speed * this.diff.eSpeed * (1 + Math.min(0.25, (this.stage.level || 0) * 0.01)) * this.terrainFactor(e) * (confused ? 0.6 : 1);
+      if (e.kind < 0 && this.bossAct(e, spec, confused)) return;
+      const speed = spec.speed * this.diff.eSpeed * (1 + Math.min(0.25, (this.stage.level || 0) * 0.01)) * this.terrainFactor(e) * (confused ? 0.6 : 1) * (e.phase >= 2 ? 1.25 : 1);
       // The mortar stops to fire; the miner drops mines as it goes
-      if (spec.mortar || e.kind < 0) {
-        if (--e.special <= 0 && !confused && this.launchShell(e)) e.special = (e.kind < 0 ? 200 : 230) + Math.random() * 120;
+      if (spec.mortar || (e.kind < 0 && e.btype !== 'king')) {
+        if (--e.special <= 0 && !confused && (e.btype === 'catapult' ? this.launchVolley(e) : this.launchShell(e))) {
+          e.special = (e.kind < 0 ? (e.btype === 'catapult' ? 170 : e.phase >= 2 ? 150 : 200) : 230) + Math.random() * 120;
+        }
         if (e.hold > 0) { e.hold--; e.moving = false; return; }
       }
       if (spec.mines && --e.special <= 0) { this.dropMine(e); e.special = 240 + Math.random() * 140; }
@@ -586,7 +641,164 @@
       if (e.blocked && this.brickAhead(e)) chance *= 4;
       if (!confused && this.inSight(e)) chance *= 5;
       if (confused) chance *= 0.3;
+      if (this.storm > 60) chance *= 0.55;
       if (Math.random() < chance) this.fire(e);
+    }
+
+    specOf(t) { return t.kind < 0 ? BOSSES[t.btype] || BOSS : ENEMY[t.kind]; }
+
+    // ---------- the region bosses ----------
+    // Returns true when the boss's own move took this tick (a charge, sailing, a wind-up)
+    bossAct(e, spec, confused) {
+      if (e.btype === 'ship') { this.sail(e, spec, confused); return true; }
+      if (e.btype !== 'king' && !(e.btype === 'chief' && e.phase >= 3)) return false;
+      if (e.windup > 0) {
+        e.moving = false;
+        if (--e.windup === 0) { e.charge = 80; this.sound('mortar'); }
+        return true;
+      }
+      if (e.charge > 0) {
+        e.charge--;
+        this.smashAhead(e);
+        e.moving = this.moveTank(e, spec.speed * this.diff.eSpeed * 3.2);
+        if (e.moving) e.anim += 2;
+        const s = e.size;
+        for (const pl of this.players) {
+          const p = pl.tank;
+          if (!p || !hit(e.x + DX[e.dir] * 3, e.y + DY[e.dir] * 3, s, s, p.x, p.y, 16, 16)) continue;
+          this.damagePlayer(p, 2);
+          e.charge = 0; e.hold = 40;
+          this.effects.push({ x: p.x + 8, y: p.y + 8, kind: 'small', t: 0, light: true });
+        }
+        const w = this.well;
+        if (e.charge > 0 && w && !w.dead && hit(e.x + DX[e.dir] * 3, e.y + DY[e.dir] * 3, s, s, w.x, w.y, 16, 16)) { this.damageWell(1); e.charge = 0; e.hold = 40; }
+        if (e.charge > 0 && e.blocked && !this.brickAhead(e)) { e.charge = 0; e.hold = 30; this.effects.push({ x: e.x + s / 2 + DX[e.dir] * s / 2, y: e.y + s / 2 + DY[e.dir] * s / 2, kind: 'dust', t: 0 }); }
+        if (e.charge === 0) e.rush = 200 + Math.random() * 120;
+        return true;
+      }
+      if (e.hold > 0) { e.hold--; e.moving = false; return true; }
+      if (e.rush == null) e.rush = 150;
+      if (!confused && --e.rush <= 0) {
+        // Charges down a lane at a guardian lined up with it, after a short warning
+        const cx = e.x + e.size / 2, cy = e.y + e.size / 2;
+        for (const pl of this.players) {
+          const p = pl.tank;
+          if (!p) continue;
+          const dx = p.x + 8 - cx, dy = p.y + 8 - cy;
+          let dir = -1;
+          if (Math.abs(dx) < 14 && Math.abs(dy) < 150) dir = dy < 0 ? 0 : 2;
+          else if (Math.abs(dy) < 14 && Math.abs(dx) < 150) dir = dx < 0 ? 3 : 1;
+          if (dir < 0 || this.hardBlocked(e, dir)) continue;
+          this.turn(e, dir);
+          e.windup = 36;
+          e.moving = false;
+          this.sound('roar');
+          return true;
+        }
+        e.rush = 20;
+      }
+      return false;
+    }
+
+    // While charging, the boss smashes through mud walls in its way
+    smashAhead(e) {
+      const s = e.size, x = e.x + DX[e.dir] * 4, y = e.y + DY[e.dir] * 4;
+      const cx0 = Math.max(0, Math.floor(x / 4)), cy0 = Math.max(0, Math.floor(y / 4));
+      const cx1 = Math.min(NC - 1, Math.floor((x + s - 0.001) / 4)), cy1 = Math.min(NC - 1, Math.floor((y + s - 0.001) / 4));
+      let broke = false;
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) if (this.map[cy * NC + cx] === MUD) { this.setCell(cx, cy, EMPTY); broke = true; }
+      if (broke) this.sound('mud');
+    }
+
+    // The two leftmost tiles are open water from top to bottom (the coast's boss map)
+    shipLane() {
+      for (let cy = 4; cy < NC; cy++) for (let cx = 0; cx < 8; cx++) if (this.map[cy * NC + cx] !== WATER) return false;
+      return true;
+    }
+
+    // The pirate ship sails up and down the water, keeping level with a guardian, and fires broadsides at the shore
+    sail(e, spec, confused) {
+      let target = null;
+      for (const pl of this.players) if (pl.tank && (!target || Math.abs(pl.tank.y - e.y) < Math.abs(target.y - e.y))) target = pl.tank;
+      if (confused || !target) { if (--e.aiTimer <= 0) { e.goal = 16 + Math.random() * 160; e.aiTimer = 120; } }
+      else e.goal = Math.max(16, Math.min(FIELD - 32, target.y - 8));
+      if (e.goal == null) e.goal = e.y;
+      const dy = e.goal - e.y, step = spec.speed * this.diff.eSpeed * (confused ? 0.6 : 1);
+      e.moving = Math.abs(dy) > 1;
+      if (e.moving) {
+        e.dir = dy < 0 ? 0 : 2;
+        const ny = e.y + Math.sign(dy) * Math.min(step, Math.abs(dy));
+        if (!this.tanks.some(o => o !== e && !o.dead && hit(e.x, ny, 32, 32, o.x, o.y, o.size, o.size))) e.y = ny;
+        e.anim++;
+      }
+      if (--e.special <= 0 && !confused && this.launchShell(e)) e.special = 260 + Math.random() * 120;
+      if (e.hold > 0) e.hold--;
+      // A broadside when a guardian is level with the gun ports, now and then otherwise
+      const level = target && Math.abs(target.y + 8 - (e.y + 16)) < 22;
+      if (e.cooldown <= 0 && (level ? Math.random() < 0.08 : Math.random() < 0.006)) this.broadside(e);
+    }
+
+    broadside(e) {
+      if (e.bullets > 0 || e.cooldown > 0) return;
+      const speed = this.specOf(e).bullet * this.diff.eBullet;
+      for (const oy of [6, 16, 26]) {
+        this.bullets.push({ id: this.nextId++, x: e.x + 34, y: e.y + oy, dir: 1, speed, dmg: 1, power: false, owner: e, team: e.team, dead: false, age: 0 });
+        e.bullets++;
+      }
+      e.cooldown = 80;
+      this.effects.push({ x: e.x + 34, y: e.y + 16, kind: 'dust', t: 0 });
+      this.sound('mortar');
+    }
+
+    // The giant catapult throws three boulders around a guardian; some stay where they land as rocks
+    launchVolley(e) {
+      const options = [];
+      for (const pl of this.players) if (pl.tank) options.push(pl.tank);
+      for (const c of this.camels) if (!c.dead && !c.arrived && c.x >= 0) options.push(c);
+      if (!options.length) return false;
+      const tg = options[Math.floor(Math.random() * options.length)];
+      const sx = e.x + e.size / 2, sy = e.y + 4;
+      for (let i = 0; i < 3; i++) {
+        const tx = Math.max(6, Math.min(FIELD - 6, tg.x + 8 + (i - 1) * 18 + (Math.random() - 0.5) * 8));
+        const ty = Math.max(6, Math.min(FIELD - 6, tg.y + 8 + (Math.random() - 0.5) * 16));
+        const dur = Math.round(70 + Math.hypot(tx - sx, ty - sy) * 0.15) + i * 8;
+        this.shells.push({ sx, sy, tx, ty, t: 0, dur, rock: true });
+      }
+      e.hold = 40;
+      this.sound('mortar');
+      this.sound('whistle');
+      return true;
+    }
+
+    dropRock(s) {
+      if (this.rocks >= 10 || Math.random() > 0.35) return;
+      const cx = Math.floor((s.tx - 4) / 8) * 2, cy = Math.floor((s.ty - 4) / 8) * 2, x = cx * 4, y = cy * 4;
+      if (cx < 0 || cy < 4 || cx > NC - 2 || cy > NC - 6) return;
+      if (this.well && hit(x, y, 8, 8, 72, 168, 64, 40)) return;
+      if (this.tanks.some(t => !t.dead && hit(x, y, 8, 8, t.x, t.y, t.size, t.size)) || this.spawns.some(sp => hit(x, y, 8, 8, sp.x, sp.y, 32, 32))) return;
+      if (this.powerup && hit(x, y, 8, 8, this.powerup.x, this.powerup.y, 16, 16)) return;
+      for (const c of this.camels) if (hit(x, y, 8, 8, c.x - 8, c.y - 8, 32, 32)) return;
+      if (this.road[cy * NC + cx]) return;
+      for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.setCell(cx + ox, cy + oy, STONE);
+      this.rocks++;
+    }
+
+    // The chief grows angrier as he is hurt: at 60% he calls his raiders and speeds up, at 25% he charges
+    chiefPhase(e) {
+      const next = e.hp <= e.max * 0.25 ? 3 : e.hp <= e.max * 0.6 ? 2 : 1;
+      if (next <= e.phase) return;
+      e.phase = next;
+      this.toast(next === 2 ? 'الزعيم غاضب! استدعى رجاله' : 'الزعيم يقاتل بآخر ما لديه!');
+      this.sound('roar');
+      this.vibrate([80, 40, 80]);
+      e.special = 120;
+      const kinds = next === 2 ? [0, 1] : [4, 1];
+      let k = 0;
+      for (const sp of TOP_SPAWNS) {
+        if (k >= kinds.length) break;
+        if (this.tanks.some(t => !t.dead && hit(sp.x, sp.y, 16, 16, t.x, t.y, t.size, t.size)) || this.cellsIn(sp.x, sp.y, 16, 16, solid)) continue;
+        this.spawns.push({ team: 'e', x: sp.x, y: sp.y, t: 60, kind: kinds[k++], bonus: k === 1 });
+      }
     }
 
     // ---------- mortar shells and mines ----------
@@ -596,6 +808,7 @@
       // Shells fly over walls, so only ordinary mortars aim at the well, and not often; the boss aims at tanks
       if (this.well && !this.well.dead && e.kind >= 0) options.push(this.well);
       for (const c of this.camels) if (!c.dead && !c.arrived && c.x >= 0) options.push(c, c);
+      if (this.vip && !this.vip.dead && !this.vip.arrived && this.vip.x >= 0) options.push(this.vip, this.vip);
       if (!options.length) return false;
       const tg = options[Math.floor(Math.random() * options.length)];
       const sx = e.x + e.size / 2, sy = e.y + e.size / 2;
@@ -614,12 +827,16 @@
         s.done = true;
         this.effects.push({ x: s.tx, y: s.ty, kind: 'big', t: 8, light: true });
         this.sound('boom');
+        if (s.rock) this.dropRock(s);
         const r = 12;
         for (const pl of this.players) {
           const p = pl.tank;
           if (p && Math.hypot(p.x + 8 - s.tx, p.y + 8 - s.ty) < r + 4) this.damagePlayer(p, 2);
         }
         for (const c of this.camels) if (!c.dead && !c.arrived && Math.hypot(c.x + 8 - s.tx, c.y + 8 - s.ty) < r + 4) this.damageCamel(c, 1);
+        const v = this.vip;
+        if (v && !v.dead && !v.arrived && Math.hypot(v.x + 8 - s.tx, v.y + 8 - s.ty) < r + 4) this.damageVip(1);
+        for (const q of this.prisoners) if (!q.dead && !q.saved && Math.hypot(q.x + 8 - s.tx, q.y + 8 - s.ty) < r) this.damagePrisoner(q);
         if (this.well && !this.well.dead && Math.hypot(this.well.x + 8 - s.tx, this.well.y + 8 - s.ty) < r + 2) this.damageWell(1);
         const cx0 = Math.floor((s.tx - 8) / 4), cy0 = Math.floor((s.ty - 8) / 4);
         for (let cy = cy0; cy < cy0 + 4; cy++) for (let cx = cx0; cx < cx0 + 4; cx++) {
@@ -649,6 +866,8 @@
         for (const c of this.camels) {
           if (!m.done && !c.dead && !c.arrived && hit(c.x + 2, c.y + 2, 12, 12, m.x + 1, m.y + 1, 6, 6)) { this.explodeMine(m); this.damageCamel(c, 1); }
         }
+        const v = this.vip;
+        if (v && !m.done && !v.dead && !v.arrived && hit(v.x + 2, v.y + 2, 12, 12, m.x + 1, m.y + 1, 6, 6)) { this.explodeMine(m); this.damageVip(1); }
       }
       this.mines = this.mines.filter(m => !m.done);
     }
@@ -696,6 +915,12 @@
         if (!this.well.dead && b.team !== 'p') this.damageWell(1);
         return;
       }
+      for (const c of this.cages) {
+        if (c.open || !hit(bx, by, 4, 4, c.x + 1, c.y + 1, 14, 14)) continue;
+        this.killBullet(b, true);
+        if (b.team === 'p') this.damageCage(c, b.dmg);
+        return;
+      }
       if (b.team === 'p') {
         for (const tw of this.towers) {
           if (tw.dead || !hit(bx, by, 4, 4, tw.x, tw.y, 16, 16)) continue;
@@ -717,11 +942,20 @@
           this.damageCamel(c, 1);
           return;
         }
+        const v = this.vip;
+        if (v && !v.dead && !v.arrived && hit(bx, by, 4, 4, v.x + 1, v.y + 1, 14, 14)) { this.killBullet(b, true); this.damageVip(1); return; }
+        for (const q of this.prisoners) {
+          if (q.dead || q.saved || !hit(bx, by, 4, 4, q.x + 4, q.y + 4, 8, 8)) continue;
+          this.killBullet(b, true);
+          this.damagePrisoner(q);
+          return;
+        }
       }
       for (const t of this.tanks) {
         if (t.dead || t === b.owner || !hit(bx, by, 4, 4, t.x + 1, t.y + 1, t.size - 2, t.size - 2)) continue;
         if (!this.isFoe(b.owner, t)) {
-          if (t.team !== 'p' || b.team !== 'p') continue;
+          // Salem's shells fly past the guardians
+          if (t.team !== 'p' || b.team !== 'p' || b.owner.vip) continue;
           // A teammate's shell only stuns
           this.killBullet(b, true);
           t.stun = 45;
@@ -786,13 +1020,13 @@
       if (e.dead) return;
       if (e.bonus) { e.bonus = false; this.spawnPowerup(); }
       e.hp -= dmg;
-      if (e.hp > 0) { e.flash = 12; this.sound('armor'); return; }
+      if (e.hp > 0) { e.flash = 12; this.sound('armor'); if (e.btype === 'chief') this.chiefPhase(e); return; }
       this.killEnemy(e);
     }
 
     killEnemy(e, silent) {
       e.dead = true;
-      const spec = e.kind < 0 ? BOSS : ENEMY[e.kind];
+      const spec = this.specOf(e);
       this.effects.push({ x: e.x + e.size / 2, y: e.y + e.size / 2, kind: 'big', t: 0, light: true, scale: e.size / 16 });
       if (!silent) {
         if (e.kind < 0) this.stats.boss++; else this.stats.kills[e.kind]++;
@@ -805,7 +1039,7 @@
       }
       this.sound(e.kind < 0 ? 'tower' : 'boom');
       this.vibrate(e.kind < 0 ? [120, 60, 200] : 12);
-      if (e.kind < 0) this.boss = null;
+      if (e.kind < 0) { this.boss = null; this.stats.bossType = e.btype; }
     }
 
     damagePlayer(p, dmg, by) {
@@ -827,6 +1061,7 @@
       this.vibrate(220);
       pl.level = Math.min(3, pl.upg.cannon);
       this.stats.deaths++;
+      this.dropPrisoners(pl);
       if (this.duel) {
         if (by != null && by !== pl.pid && this.players[by]) { this.players[by].kills++; this.emit('frag', { by, victim: pl.pid }); }
         this.dropFlag(pl.pid);
@@ -953,6 +1188,193 @@
       if (this.stats.camelsArrived >= this.need && this.camels.every(c => c.dead || c.arrived)) this.win();
     }
 
+    // ---------- prisoners of the gang ----------
+    damageCage(c, dmg) {
+      c.hp -= dmg;
+      c.flash = 10;
+      this.sound('cage');
+      if (c.hp > 0) return;
+      c.open = true;
+      this.stats.cagesOpened++;
+      this.prisoners.push({ x: c.x, y: c.y, hp: 3, max: 3, follow: -1, ti: 0, dead: false, saved: false, anim: 0, left: false, flash: 0 });
+      this.effects.push({ x: c.x + 8, y: c.y + 8, kind: 'dust', t: 0 });
+      this.addScore(300, c.x + 8, c.y);
+      this.sound('freed');
+      this.vibrate([30, 30, 30]);
+      this.toast('تحرّر أسير! اقترب منه ليتبعك إلى البئر');
+    }
+
+    // Each guardian leaves a trail of the spots they drove through; prisoners walk along it
+    markTrail(pl, p) {
+      const tr = pl.trail, last = tr[tr.length - 1];
+      if (last && Math.abs(last.x - p.x) + Math.abs(last.y - p.y) < 2) return;
+      tr.push({ x: p.x, y: p.y });
+      if (tr.length > 240) {
+        tr.shift();
+        for (const r of this.prisoners) if (r.follow === pl.pid) r.ti = Math.max(0, r.ti - 1);
+      }
+    }
+
+    dropPrisoners(pl) {
+      for (const r of this.prisoners) if (r.follow === pl.pid) r.follow = -1;
+      pl.trail = [];
+    }
+
+    updatePrisoners() {
+      const taken = [0, 0, 0, 0], w = this.well;
+      for (const r of this.prisoners) {
+        if (r.dead || r.saved) continue;
+        // Home once they reach the well's walls (its centre is at +8,+8 like theirs)
+        if (w && !w.dead && Math.hypot(r.x - w.x, r.y - w.y) < 40) {
+          r.saved = true;
+          this.stats.prisonersSaved++;
+          this.addScore(500, r.x + 8, r.y);
+          this.coins += 20;
+          this.sound('coin');
+          this.toast('وصل أسير إلى الواحة! ' + this.stats.prisonersSaved + ' من ' + this.need);
+          continue;
+        }
+        if (r.follow < 0) {
+          // waits until a guardian comes close
+          let best = null, bd = 26;
+          for (const pl of this.players) {
+            const d = pl.tank ? Math.hypot(pl.tank.x - r.x, pl.tank.y - r.y) : 99;
+            if (d < bd) { best = pl; bd = d; }
+          }
+          if (!best) continue;
+          const k = this.prisoners.filter(o => o.follow === best.pid && !o.dead && !o.saved).length;
+          if (!best.trail.length) best.trail.push({ x: best.tank.x, y: best.tank.y });
+          r.follow = best.pid;
+          r.ti = Math.max(0, best.trail.length - 1 - 9 * (k + 1));
+          this.sound('pickup');
+          continue;
+        }
+        const lead = this.players[r.follow], tr = lead.trail, k = taken[r.follow]++;
+        const limit = tr.length - 1 - 9 * (k + 1);
+        const tg = tr[Math.min(r.ti, tr.length - 1)];
+        // never walks into the guardian it follows (when they back up, it waits)
+        if (!tg || (lead.tank && Math.hypot(lead.tank.x - r.x, lead.tank.y - r.y) < 13)) continue;
+        const dx = tg.x - r.x, dy = tg.y - r.y, d = Math.hypot(dx, dy), sp = 0.9;
+        if (d <= sp) { r.x = tg.x; r.y = tg.y; if (r.ti < limit) r.ti++; }
+        else { r.x += dx / d * sp; r.y += dy / d * sp; }
+        if (d > 0.2) { r.anim++; if (Math.abs(dx) > 0.3) r.left = dx < 0; }
+      }
+    }
+
+    damagePrisoner(r) {
+      if (r.dead || r.saved) return;
+      r.flash = 14;
+      if (--r.hp > 0) { this.sound('camel'); if (r.hp === 1) this.toast('أسير مصاب! أوصله بسرعة'); return; }
+      r.dead = true;
+      this.stats.prisonersLost++;
+      this.effects.push({ x: r.x + 8, y: r.y + 8, kind: 'dust', t: 0 });
+      this.sound('hurt');
+      this.toast('أُصيب أحد الأسرى!');
+      const left = this.cages.filter(c => !c.open).length + this.prisoners.filter(q => !q.dead).length;
+      if (left < this.need) this.lose('prisoners');
+    }
+
+    // ---------- Commander Salem's car ----------
+    updateVip() {
+      const v = this.vip;
+      if (v.dead || v.arrived) return;
+      if (v.flash > 0) v.flash--;
+      if (v.cooldown > 0) v.cooldown--;
+      // Salem fires back at raiders lined up with his car
+      if (v.cooldown <= 0 && v.bullets === 0 && v.x >= 0) {
+        for (const e of this.tanks) {
+          if (e.team !== 'e' || e.dead) continue;
+          const dx = e.x + e.size / 2 - v.x - 8, dy = e.y + e.size / 2 - v.y - 8;
+          let dir = -1;
+          if (Math.abs(dx) < e.size / 2 + 2 && Math.abs(dy) < 110) dir = dy < 0 ? 0 : 2;
+          else if (Math.abs(dy) < e.size / 2 + 2 && Math.abs(dx) < 110) dir = dx < 0 ? 3 : 1;
+          if (dir < 0) continue;
+          const heading = v.dir;
+          v.dir = dir; this.shoot(v, 0, 2.6, 1, false); v.dir = heading;
+          v.cooldown = 80;
+          this.sound('shoot');
+          break;
+        }
+      }
+      if (v.wait > 0) { v.wait--; return; }
+      const [tx, ty] = this.waypoints[v.wp];
+      const dx = tx - v.x, dy = ty - v.y, step = 0.27;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        v.x = tx; v.y = ty;
+        if (this.stops.includes(v.wp)) {
+          v.wait = 240;
+          v.stopsDone++;
+          this.addScore(200, v.x + 8, v.y);
+          this.sound('coin');
+          this.toast('القائد سالم يتفقّد الموقع ' + v.stopsDone + ' من ' + this.stops.length);
+        }
+        if (++v.wp >= this.waypoints.length) {
+          v.arrived = true;
+          this.addScore(1000, Math.min(200, v.x), v.y + 8);
+          this.coins += 40;
+          this.toast('أنهى القائد سالم جولته بسلام!');
+          this.win();
+        }
+        return;
+      }
+      const across = Math.abs(dx) >= 0.5;
+      const nx = across ? v.x + Math.sign(dx) * Math.min(step, Math.abs(dx)) : v.x;
+      const ny = across ? v.y : v.y + Math.sign(dy) * Math.min(step, Math.abs(dy));
+      v.dir = across ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+      // The car waits for anything on the road; raiders in the way soon turn aside
+      const blocker = this.tanks.find(t => !t.dead && hit(nx + 1, ny + 1, 14, 14, t.x, t.y, t.size, t.size) && !hit(v.x + 1, v.y + 1, 14, 14, t.x, t.y, t.size, t.size));
+      if (blocker) {
+        if (blocker.team === 'e' && ++v.waited > 45) { blocker.dir = (blocker.dir + 2) % 4; blocker.aiTimer = 90; v.waited = 0; }
+        return;
+      }
+      v.waited = 0;
+      v.x = nx; v.y = ny;
+      v.anim++;
+    }
+
+    damageVip(n) {
+      const v = this.vip;
+      if (!v || v.dead || v.arrived) return;
+      v.hp -= n;
+      v.flash = 14;
+      this.stats.vipHit = true;
+      this.sound('hurt');
+      this.vibrate(60);
+      if (v.hp > 0) { if (v.hp === Math.ceil(v.max / 2) || v.hp === 1) this.toast('عربة القائد سالم في خطر!'); return; }
+      v.dead = true;
+      this.effects.push({ x: v.x + 8, y: v.y + 8, kind: 'big', t: 0, light: true });
+      this.sound('die');
+      this.lose('vip');
+    }
+
+    // ---------- the sandstorm ----------
+    startStorm() {
+      this.storm = this.stormMax = 900;
+      this.stormDir = Math.random() < 0.5 ? 1 : 3;
+      this.stats.storms++;
+      this.toast('عاصفة رملية! الرؤية ضعيفة والريح تدفع المركبات');
+      this.sound('storm');
+      this.vibrate([40, 60, 40]);
+    }
+
+    updateStorm() {
+      if (--this.storm <= 0) {
+        this.storm = 0;
+        this.toast('انقشعت العاصفة… وكشفت الرمال شيئاً');
+        if (!this.powerup && this.state === 'play') this.spawnPowerup();
+        this.stormNext = Math.round(60 * (50 + Math.random() * 40));
+        return;
+      }
+      if (this.storm % 130 === 0) this.sound('storm');
+      // the wind pushes every vehicle a little, except the bosses and anything stuck in the sand
+      if (this.storm < 60 || this.storm > this.stormMax - 60) return;
+      const w = this.stormDir === 1 ? 0.12 : -0.12;
+      for (const t of this.tanks) {
+        if (t.dead || t.kind < 0 || t.sink > 0) continue;
+        if (!this.tankBlocked(t, t.x + w, t.y)) t.x += w;
+      }
+    }
+
     // ---------- power-ups ----------
     spawnPowerup(nx, ny) {
       if (this.duel) {
@@ -971,6 +1393,7 @@
         if (this.well && hit(x, y, 16, 16, 80, 176, 48, 32)) continue;
         if (this.cellsIn(x, y, 16, 16, c => c === STONE || c === WATER) > 2) continue;
         if (this.towers.some(t => !t.dead && hit(x, y, 16, 16, t.x, t.y, 16, 16))) continue;
+        if (this.cages.some(c => !c.open && hit(x, y, 16, 16, c.x, c.y, 16, 16))) continue;
         this.powerup = { type, x, y, t: 0 };
         this.sound('appear');
         return;
@@ -1008,6 +1431,7 @@
           if (this.duel) { p.hp = p.max; this.sound('water'); break; }
           if (this.well && !this.well.dead) this.well.hp = this.well.max;
           else if (this.camels.length) for (const c of this.camels) { if (!c.dead && !c.arrived) c.hp = c.max; }
+          else if (this.vip && !this.vip.dead) this.vip.hp = this.vip.max;
           else for (const q of this.players) if (q.tank) q.tank.hp = q.tank.max;
           this.sound('water');
           break;
@@ -1049,6 +1473,7 @@
       if (away) {
         if (pl.tank) { pl.tank.dead = true; pl.tank = null; }
         pl.respawn = 0;
+        this.dropPrisoners(pl);
         this.inputs[pid].dir = -1; this.inputs[pid].alt = -1; this.inputs[pid].fire = false;
         if (this.state === 'play' && this.duel) { this.dropFlag(pid); if (this.duel === 'duel' && this.players.filter(q => q.lives > 0 && !q.away).length <= 1) this.endDuel(); }
         else if (this.state === 'play' && this.players.every(q => q.lives <= 0 || q.away)) this.lose('lives');
@@ -1122,6 +1547,10 @@
       for (const pl of this.players) this.updatePlayer(pl);
       for (const t of this.tanks) if (t.team === 'e' && !t.dead) this.updateEnemy(t);
       if (this.camels.length && this.state === 'play') this.updateCamels();
+      if (this.prisoners.length && this.state === 'play') this.updatePrisoners();
+      if (this.vip && this.state === 'play') this.updateVip();
+      if (this.state === 'play' && this.stormNext > 0 && --this.stormNext === 0) this.startStorm();
+      if (this.storm > 0) this.updateStorm();
       if (this.duel && this.state === 'play') this.updateDuel();
       this.updateBullets();
       this.updateShells();
@@ -1130,6 +1559,8 @@
       this.updatePowerup();
       this.updateSkins();
       for (const tw of this.towers) if (tw.flash > 0) tw.flash--;
+      for (const c of this.cages) if (c.flash > 0) c.flash--;
+      for (const r of this.prisoners) if (r.flash > 0) r.flash--;
       for (const e of this.effects) e.t++;
       this.effects = this.effects.filter(e => e.t < (e.kind === 'big' ? 35 : 12));
       for (const p of this.popups) p.t++;
@@ -1231,6 +1662,7 @@
           break;
         case 'boss': if (this.t > 120 && !this.boss && !this.spawns.some(s => s.big)) this.win(); break;
         case 'tutorial': if (this.waveSent && !this.queue.length && !enemiesLeft) this.win(); break;
+        case 'rescue': if (this.stats.prisonersSaved >= this.need) this.win(); break;
       }
     }
 
@@ -1250,13 +1682,14 @@
       if (won) {
         stars = 1;
         if (st.deaths === 0) stars++;
-        const perfect = this.mission === 'escort' ? st.camelsLost === 0 : this.mission === 'collect' ? st.skinsStolen === 0 : !st.wellDamaged;
+        const perfect = this.mission === 'escort' ? st.camelsLost === 0 : this.mission === 'collect' ? st.skinsStolen === 0 :
+          this.mission === 'vip' ? !st.vipHit : this.mission === 'rescue' ? st.prisonersLost === 0 && !st.wellDamaged : !st.wellDamaged;
         if (perfect) stars++;
         this.coins += 50 + stars * 25;
       }
       this.result = {
         won, stars, score: this.score, coins: won ? this.coins : Math.round(this.coins / 2), reason: this.loseReason,
-        stats: st, mission: this.mission, stage: this.stage, players: this.nPlayers, difficulty: this.difficulty, tutorial: this.mission === 'tutorial',
+        stats: st, mission: this.mission, stage: this.stage, players: this.nPlayers, difficulty: this.difficulty, tutorial: this.mission === 'tutorial', bossType: this.bossType,
         noDamage: st.hpLost === 0,
       };
       this.emit(won ? 'clear' : 'gameover', this.result);
@@ -1274,7 +1707,9 @@
         case 'escort': return { icon: 'camel', value: st.camelsArrived, max: this.need, label: 'الجمال' };
         case 'survive': return { icon: 'moon', value: Math.ceil(this.timer / 60), time: true, label: 'حتى الفجر' };
         case 'tutorial': return { icon: 'foe', value: this.tanks.filter(t => t.team === 'e').length + this.queue.length, label: 'الأهداف' };
-        case 'boss': return { icon: 'boss', value: this.boss ? Math.max(0, this.boss.hp) : this.bossHp, max: this.bossHp, label: 'القلعة' };
+        case 'rescue': return { icon: 'cage', value: st.prisonersSaved, max: this.need, label: 'الأسرى' };
+        case 'vip': return { icon: 'vip', value: this.vip ? Math.max(0, this.vip.hp) : 0, max: this.vip ? this.vip.max : 6, label: 'عربة سالم' };
+        case 'boss': return { icon: 'boss', boss: this.bossType, value: this.boss ? Math.max(0, this.boss.hp) : this.bossHp, max: this.bossHp, label: BOSSES[this.bossType].short };
       }
       return { icon: 'foe', value: 0 };
     }
@@ -1287,9 +1722,9 @@
         pl: this.players.map(p => [p.lives, p.level, p.coffee > 0 ? 1 : 0, this.falconsOf(p.pid), p.away ? 1 : 0, p.kills || 0, p.caps || 0]),
         fl: this.flags.map(f => [f.x, f.y, f.carrier, f.home ? 1 : 0]), cp: this.caps, wn: this.winner,
         tk: this.tanks.map(t => [t.id, t.team === 'p' ? 1 : 0, t.kind, t.pid == null ? -1 : t.pid, q(t.x), q(t.y), t.dir, t.hp, t.max,
-          t.anim & 255, t.shield > 0 ? 1 : 0, t.flash, t.bonus ? 1 : 0, t.stun, t.sink, t.moving ? 1 : 0]),
+          t.anim & 255, t.shield > 0 ? 1 : 0, t.flash, t.bonus ? 1 : 0, t.stun, t.sink, t.moving ? 1 : 0, t.btype || 0, t.windup > 0 ? 1 : 0, t.phase || 0]),
         bu: this.bullets.map(b => [b.id, q(b.x), q(b.y), b.dir, b.team === 'p' ? 1 : 0, b.age]),
-        sh: this.shells.map(x => [q(x.sx), q(x.sy), q(x.tx), q(x.ty), x.t, x.dur]),
+        sh: this.shells.map(x => [q(x.sx), q(x.sy), q(x.tx), q(x.ty), x.t, x.dur, x.rock ? 1 : 0]),
         mi: this.mines.map(m => [m.x, m.y, m.t]),
         tw: this.towers.map(t => [t.hp, t.max, t.dead ? 1 : 0, t.flash]),
         ca: this.camels.map(c => [q(c.x), q(c.y), c.hp, c.max, c.left ? 1 : 0, c.anim, c.dead ? 1 : 0, c.arrived ? 1 : 0, c.flash]),
@@ -1301,6 +1736,10 @@
         po: this.popups.map(x => [q(x.x), q(x.y), x.text, x.t]),
         we: this.well ? [this.well.hp, this.well.max, this.well.dead ? 1 : 0, this.well.flash] : null,
         tm: [this.timer, this.timerMax || 0],
+        cg: this.cages.map(c => [c.hp, c.open ? 1 : 0, c.flash]),
+        pr: this.prisoners.map(r => [q(r.x), q(r.y), r.dead ? 2 : r.saved ? 3 : r.follow >= 0 ? 1 : 0, r.anim & 255, r.left ? 1 : 0, r.hp, r.flash]),
+        vp: this.vip ? [q(this.vip.x), q(this.vip.y), this.vip.hp, this.vip.max, this.vip.dir, this.vip.anim & 255, this.vip.flash, this.vip.dead ? 1 : 0, this.vip.arrived ? 1 : 0, this.vip.wp] : null,
+        ss: this.storm > 0 ? [this.storm, this.stormDir, this.stormMax] : null,
         ce: this.cellLog.splice(0),
       };
     }
@@ -1332,14 +1771,14 @@
       };
       this.tanks = s.tk.map(a => {
         const t = moved({ id: a[0], team: a[1] ? 'p' : 'e', kind: a[2], pid: a[3] < 0 ? undefined : a[3], dir: a[6], hp: a[7], max: a[8],
-          anim: a[9], shield: a[10], flash: a[11], bonus: !!a[12], stun: a[13], sink: a[14], moving: !!a[15] }, a[4], a[5], 't' + a[0]);
+          anim: a[9], shield: a[10], flash: a[11], bonus: !!a[12], stun: a[13], sink: a[14], moving: !!a[15], btype: a[16] || undefined, windup: a[17] || 0, phase: a[18] || 0 }, a[4], a[5], 't' + a[0]);
         t.size = t.team === 'e' && t.kind < 0 ? 32 : 16;
         if (t.team === 'p' && this.players[t.pid]) this.players[t.pid].tank = t;
         return t;
       });
       this.boss = this.tanks.find(t => t.team === 'e' && t.kind < 0) || null;
       this.bullets = s.bu.map(a => moved({ id: a[0], dir: a[3], team: a[4] ? 'p' : 'e', age: a[5] }, a[1], a[2], 'b' + a[0]));
-      this.shells = s.sh.map(a => ({ sx: a[0], sy: a[1], tx: a[2], ty: a[3], t: a[4], dur: a[5] }));
+      this.shells = s.sh.map(a => ({ sx: a[0], sy: a[1], tx: a[2], ty: a[3], t: a[4], dur: a[5], rock: !!a[6] }));
       this.mines = s.mi.map(a => ({ x: a[0], y: a[1], t: a[2] }));
       s.tw.forEach((a, i) => { const t = this.towers[i]; if (t) { t.hp = a[0]; t.max = a[1]; t.dead = !!a[2]; t.flash = a[3]; } });
       s.ca.forEach((a, i) => {
@@ -1355,6 +1794,15 @@
       this.effects = s.fx.map(a => ({ x: a[0], y: a[1], kind: a[2], t: a[3], scale: a[4], light: !!a[5] }));
       this.popups = s.po.map(a => ({ x: a[0], y: a[1], text: a[2], t: a[3] }));
       if (s.we && this.well) { this.well.hp = s.we[0]; this.well.max = s.we[1]; this.well.dead = !!s.we[2]; this.well.flash = s.we[3]; }
+      if (Array.isArray(s.cg)) s.cg.forEach((a, i) => { const c = this.cages[i]; if (c) { c.hp = a[0]; c.open = !!a[1]; c.flash = a[2]; } });
+      if (Array.isArray(s.pr)) {
+        this.prisoners = s.pr.map((a, i) => moved({ dead: a[2] === 2, saved: a[2] === 3, follow: a[2] === 1 ? 0 : -1, anim: a[3], left: !!a[4], hp: a[5] || 3, max: 3, flash: a[6] || 0 }, a[0], a[1], 'r' + i));
+      }
+      if (Array.isArray(s.vp) && this.vip) {
+        const v = moved(this.vip, s.vp[0], s.vp[1], 'v');
+        v.hp = s.vp[2]; v.max = s.vp[3]; v.dir = s.vp[4]; v.anim = s.vp[5]; v.flash = s.vp[6]; v.dead = !!s.vp[7]; v.arrived = !!s.vp[8]; v.wp = s.vp[9];
+      }
+      if (Array.isArray(s.ss)) { this.storm = s.ss[0]; this.stormDir = s.ss[1]; this.stormMax = s.ss[2]; } else this.storm = 0;
     }
 
     // Positions of moving things in the last snapshot, so the next one can glide from them
@@ -1364,12 +1812,15 @@
       for (const b of this.bullets) m.set('b' + b.id, [b.nx, b.ny]);
       for (const b of this.birds) m.set('f' + b.id, [b.nx, b.ny]);
       this.camels.forEach((c, i) => m.set('c' + i, [c.nx, c.ny]));
+      this.prisoners.forEach((r, i) => m.set('r' + i, [r.nx, r.ny]));
+      if (this.vip) m.set('v', [this.vip.nx, this.vip.ny]);
       return m;
     }
 
     glide(k) {
       const g = o => { if (o.nx == null) return; o.x = o.px + (o.nx - o.px) * k; o.y = o.py + (o.ny - o.py) * k; };
-      this.tanks.forEach(g); this.bullets.forEach(g); this.birds.forEach(g); this.camels.forEach(g);
+      this.tanks.forEach(g); this.bullets.forEach(g); this.birds.forEach(g); this.camels.forEach(g); this.prisoners.forEach(g);
+      if (this.vip) g(this.vip);
     }
 
     // ---------- drawing ----------
@@ -1402,6 +1853,12 @@
         g.drawImage(fx.tower[tw.hp <= tw.max / 3 ? 2 : tw.hp <= tw.max * 2 / 3 ? 1 : 0], tw.x, tw.y);
         if (tw.flash > 0 && (tw.flash >> 1) & 1) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(tw.x, tw.y, 16, 16); }
       }
+      for (const c of this.cages) {
+        if (c.open) continue;
+        g.drawImage(fx.cage[c.hp <= c.max / 3 ? 2 : c.hp <= c.max * 2 / 3 ? 1 : 0], c.x, c.y);
+        if (c.flash > 0 && (c.flash >> 1) & 1) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(c.x, c.y, 16, 16); }
+      }
+      if (this.vip && !this.vip.dead && !this.vip.arrived) this.drawStops(g);
       for (const l of this.lanterns) g.drawImage(fx.lantern, l.x, l.y);
       g.globalAlpha = 0.28;
       for (const t of this.tanks) g.drawImage(S.shadow(this.designOf(t), t.dir), Math.round(t.x) + 1, Math.round(t.y) + 2);
@@ -1410,6 +1867,27 @@
         if (c.dead || c.arrived || c.x < -16) continue;
         const img = c.flash > 0 && (c.flash >> 1) & 1 ? fx.camelHurt[c.left ? 1 : 0] : fx.camel[c.left ? 1 : 0][(c.anim >> 3) & 1];
         g.drawImage(img, Math.round(c.x), Math.round(c.y));
+      }
+      for (const r of this.prisoners) {
+        if (r.dead || r.saved) continue;
+        const img = r.flash > 0 && (r.flash >> 1) & 1 ? fx.prisoner[2] : fx.prisoner[(r.anim >> 3) & 1];
+        if (r.hp < r.max) {
+          g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(r.x) + 4, Math.round(r.y) + 1, 8, 2);
+          g.fillStyle = '#FF6B4A'; g.fillRect(Math.round(r.x) + 4, Math.round(r.y) + 1, Math.max(1, Math.round(8 * r.hp / r.max)), 2);
+        }
+        if (r.left) { g.save(); g.translate(Math.round(r.x) + 16, Math.round(r.y)); g.scale(-1, 1); g.drawImage(img, 0, 0); g.restore(); }
+        else g.drawImage(img, Math.round(r.x), Math.round(r.y));
+        // a waiting prisoner waves for help
+        if (r.follow < 0 && (this.t >> 4) & 1) { g.fillStyle = '#F2B134'; g.fillRect(Math.round(r.x) + 7, Math.round(r.y) - 4, 2, 2); }
+      }
+      const v = this.vip;
+      if (v && !v.dead && !v.arrived && v.x > -16) {
+        g.globalAlpha = 0.28; g.drawImage(S.shadow('vip', v.dir), Math.round(v.x) + 1, Math.round(v.y) + 2); g.globalAlpha = 1;
+        g.drawImage(S.vehicle('vip', v.flash > 0 && (v.flash >> 1) & 1 ? 'hit' : 'vip', (v.anim >> 3) & 1, v.dir), Math.round(v.x), Math.round(v.y));
+        if (v.hp < v.max) {
+          g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(v.x) + 2, Math.round(v.y) - 3, 12, 2);
+          g.fillStyle = '#5BD17A'; g.fillRect(Math.round(v.x) + 2, Math.round(v.y) - 3, Math.max(1, Math.round(12 * v.hp / v.max)), 2);
+        }
       }
       for (const t of this.tanks) this.drawTank(g, t);
       for (const f of this.flags) {
@@ -1443,6 +1921,7 @@
       }
       for (const b of this.birds) this.drawBird(g, b);
       this.drawSky(g);
+      this.drawStorm(g);
       return this.frame;
     }
 
@@ -1454,16 +1933,18 @@
 
     designOf(t) {
       if (t.team === 'p') return PLAYER[this.players[t.pid].level].design;
-      return t.kind < 0 ? 'boss' : ENEMY[t.kind].design;
+      return this.specOf(t).design;
     }
 
     drawTank(g, t) {
       const fx = this.fx, design = this.designOf(t);
-      let pal = t.team === 'p' ? this.paletteOf(t.pid) : 'enemy';
+      let pal = t.team === 'p' ? this.paletteOf(t.pid) : t.kind < 0 ? this.specOf(t).pal : 'enemy';
       if (t.team === 'e' && t.bonus && (this.t >> 3) & 1) pal = 'bonus';
       if (t.flash > 0 && (t.flash >> 1) & 1) pal = 'hit';
       if (t.stun > 0 && (this.t >> 2) & 1) pal = 'stun';
-      const x = Math.round(t.x), y = Math.round(t.y) + (t.sink > 0 ? 1 : 0);
+      // a boss winding up for a charge shakes before it goes
+      const shake = t.windup > 0 ? ((this.t >> 1) & 1) * 2 - 1 : 0;
+      const x = Math.round(t.x) + shake, y = Math.round(t.y) + (t.sink > 0 ? 1 : 0);
       g.drawImage(S.vehicle(design, pal, (t.anim >> 2) & 1, t.dir), x, y);
       if (t.shield > 0) g.drawImage((t.size === 32 ? fx.shieldBig : fx.shield)[(this.t >> 1) & 1], x, y);
       if (t.team === 'e' && this.whirl > 0) g.drawImage(fx.swirl[(this.t >> 2) & 3], x + (t.size - 16) / 2, y + (t.size - 16) / 2);
@@ -1474,6 +1955,47 @@
         g.fillRect(x + 2, y - 3, t.size - 4, 2);
         g.fillStyle = t.team === 'p' ? '#5BD17A' : '#FF6B4A';
         g.fillRect(x + 2, y - 3, Math.max(1, Math.round((t.size - 4) * t.hp / t.max)), 2);
+      }
+    }
+
+    // The checkpoints still ahead on Salem's rounds: small green rings on the road
+    drawStops(g) {
+      const pulse = (this.t >> 3) & 3;
+      g.strokeStyle = '#1F8A55'; g.lineWidth = 1;
+      for (const i of this.stops) {
+        if (i < this.vip.wp || !this.waypoints[i]) continue;
+        const [x, y] = this.waypoints[i];
+        g.strokeRect(x + 3.5 - pulse / 2, y + 3.5 - pulse / 2, 9 + pulse, 9 + pulse);
+      }
+    }
+
+    // Sand hangs in the air: only a circle around each guardian stays clear, and streaks blow with the wind
+    drawStorm(g) {
+      if (!(this.storm > 0)) return;
+      const k = Math.max(0, Math.min(1, (this.stormMax - this.storm) / 60, this.storm / 60));
+      const d = this.darkctx;
+      d.globalCompositeOperation = 'source-over';
+      d.clearRect(0, 0, FIELD, FIELD);
+      d.fillStyle = 'rgba(204,158,92,' + (0.74 * k).toFixed(3) + ')';
+      d.fillRect(0, 0, FIELD, FIELD);
+      d.globalCompositeOperation = 'destination-out';
+      const clear = (x, y, r) => {
+        const grad = d.createRadialGradient(x, y, r * 0.35, x, y, r);
+        grad.addColorStop(0, 'rgba(0,0,0,1)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+        d.fillStyle = grad; d.fillRect(x - r, y - r, r * 2, r * 2);
+      };
+      for (const pl of this.players) if (pl.tank) clear(pl.tank.x + 8, pl.tank.y + 8, 46);
+      if (this.vip && !this.vip.dead) clear(this.vip.x + 8, this.vip.y + 8, 26);
+      if (this.well) clear(this.well.x + 8, this.well.y + 8, 22);
+      d.globalCompositeOperation = 'source-over';
+      g.drawImage(this.dark, 0, 0);
+      g.fillStyle = 'rgba(255,236,200,' + (0.6 * k).toFixed(3) + ')';
+      const sign = this.stormDir === 1 ? 1 : -1;
+      for (let i = 0; i < 48; i++) {
+        const y = (i * 37 + (i * i) % 23) % FIELD, len = 5 + (i % 4) * 2;
+        let x = (i * 53 + this.t * (2 + (i % 5))) % (FIELD + 40) - 20;
+        if (sign < 0) x = FIELD - x;
+        g.fillRect(Math.round(x), y, len, 1);
       }
     }
 
@@ -1490,6 +2012,15 @@
       const k = s.t / s.dur, x = s.sx + (s.tx - s.sx) * k, y = s.sy + (s.ty - s.sy) * k, h = Math.sin(k * Math.PI) * 34;
       g.fillStyle = 'rgba(0,0,0,0.3)';
       g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 2);
+      if (s.rock) {
+        g.fillStyle = '#1B140C';
+        g.fillRect(Math.round(x) - 3, Math.round(y - h) - 3, 7, 7);
+        g.fillStyle = '#8E8A82';
+        g.fillRect(Math.round(x) - 2, Math.round(y - h) - 2, 5, 5);
+        g.fillStyle = '#C9C2B4';
+        g.fillRect(Math.round(x) - 2, Math.round(y - h) - 2, 2, 2);
+        return;
+      }
       g.fillStyle = '#1B140C';
       g.fillRect(Math.round(x) - 2, Math.round(y - h) - 2, 4, 4);
       g.fillStyle = '#8A8A8A';
@@ -1562,7 +2093,12 @@
       this.clearEntities();
       this.well = stage.well ? { x: WELL.x, y: WELL.y, hp: 1, max: 1, dead: false, flash: 0 } : null;
       this.parse(stage.rows, stage.waypoints, !!stage.well);
-      if (stage.waypoints) {
+      if (stage.waypoints && stage.mission === 'vip') {
+        const [sx, sy] = stage.waypoints[0];
+        this.vip = { x: sx * 16 + 16, y: sy * 16, dir: 1 };
+        this.waypoints = stage.waypoints.map(([x, y]) => [x * 16, y * 16]);
+        this.stops = stage.stops || [];
+      } else if (stage.waypoints) {
         const [sx, sy] = stage.waypoints[0];
         this.camels = [0, 1].map(i => ({ x: sx * 16 + 16 + i * 18, y: sy * 16, anim: 0, left: false, dead: false, arrived: false, flash: 0 }));
       }
@@ -1580,6 +2116,12 @@
       for (const tw of this.towers) g.drawImage(fx.tower[0], tw.x, tw.y);
       for (const l of this.lanterns) g.drawImage(fx.lantern, l.x, l.y);
       for (const c of this.camels) g.drawImage(fx.camel[0][0], c.x, c.y);
+      for (const c of this.cages) g.drawImage(fx.cage[0], c.x, c.y);
+      if (this.vip) {
+        g.strokeStyle = '#1F8A55'; g.lineWidth = 1;
+        for (const i of this.stops) { const [x, y] = this.waypoints[i]; g.strokeRect(x + 3.5, y + 3.5, 9, 9); }
+        g.drawImage(S.vehicle('vip', 'vip', 0, 1), this.vip.x, this.vip.y);
+      }
       g.drawImage(this.trees, 0, 0);
       if (markers !== false) {
         g.globalAlpha = 0.55;
@@ -1592,5 +2134,5 @@
   }
 
   TB.Game = Game;
-  TB.consts = { BASES, CAPS_TO_WIN, FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS, PALETTES };
+  TB.consts = { BOSSES, BASES, CAPS_TO_WIN, FIELD, NC, EMPTY, MUD, STONE, WATER, PALM, DUNE, QUICK, WELL, P_SPAWN, TOP_SPAWNS, ENEMY, BOSS, PLAYER, DIFF, POWERUPS, FORTRESS, PALETTES };
 })();
